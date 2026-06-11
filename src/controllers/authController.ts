@@ -1,9 +1,64 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
+import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import { database } from '../models/database';
 import { generateToken, AuthRequest } from '../middleware/auth';
 
+type PugotiLabSession = {
+    sub: string;
+    username: string;
+    displayName?: string;
+    email?: string;
+    role: string;
+    iss: string;
+    aud: string;
+};
+
+function getCookie(req: Request, name: string): string | null {
+    const header = req.headers.cookie;
+    if (!header) return null;
+    for (const item of header.split(';')) {
+        const [key, ...value] = item.trim().split('=');
+        if (key === name) return decodeURIComponent(value.join('='));
+    }
+    return null;
+}
+
 class AuthController {
+    async sso(req: Request, res: Response) {
+        try {
+            const secret = process.env.PUGOTILAB_AUTH_SECRET;
+            const token = getCookie(req, 'pugotilab_session');
+            if (!secret || !token) {
+                return res.status(401).json({ success: false, error: 'Sessão PugotiLab não encontrada' });
+            }
+
+            const session = jwt.verify(token, secret, {
+                issuer: 'pugotilab-auth',
+                audience: 'pugotilab-services'
+            }) as PugotiLabSession;
+
+            let user = await database.getUserByUsername(session.username);
+            if (!user) {
+                const password = await bcrypt.hash(crypto.randomUUID(), 12);
+                await database.addUser({ username: session.username, password, role: 'user' });
+                user = await database.getUserByUsername(session.username);
+            }
+            if (!user) {
+                return res.status(500).json({ success: false, error: 'Falha ao provisionar usuário' });
+            }
+
+            const localToken = generateToken({ id: user.id, username: user.username, role: user.role });
+            res.json({
+                success: true,
+                data: { id: user.id, username: user.username, role: user.role, token: localToken }
+            });
+        } catch {
+            res.status(401).json({ success: false, error: 'Sessão PugotiLab inválida ou expirada' });
+        }
+    }
+
     async register(req: Request, res: Response) {
         try {
             const { username, password } = req.body;

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   pugotimoney:
     build: .
@@ -13,4 +11,11 @@ services:
       - ./server.log:/app/server.log
     environment:
       - NODE_ENV=production
+    networks:
+      - default
+      - pugotilab
     restart: unless-stopped
+
+networks:
+  pugotilab:
+    external: true

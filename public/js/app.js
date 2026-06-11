@@ -160,10 +160,7 @@ document.addEventListener('click', function(e) {
 function logout() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
-    document.getElementById('app-content').style.display = 'none';
-    document.getElementById('auth-page').style.display = 'flex';
-    showLogin();
-    delete window.app;
+    window.location.href = `https://pugotilab.com/auth/logout?return=${encodeURIComponent(window.location.origin)}`;
 }
 
 async function startApp() {
@@ -244,13 +241,20 @@ async function saveProfile() {
         localStorage.removeItem('authToken');
         localStorage.removeItem('authUser');
     }
-    document.getElementById('auth-page').style.display = 'flex';
-    const isFirst = await checkFirstUser();
-    if (isFirst) {
-        showRegister();
-    } else {
-        showLogin();
+    try {
+        const response = await origFetch('/api/auth/sso', { credentials: 'include' });
+        const data = await response.json();
+        if (data.success) {
+            localStorage.setItem('authToken', data.data.token);
+            localStorage.setItem('authUser', JSON.stringify(data.data));
+            hideAuth();
+            startApp();
+            return;
+        }
+    } catch (error) {
+        console.error('Falha ao iniciar sessão PugotiLab:', error);
     }
+    window.location.href = `https://pugotilab.com/auth?return=${encodeURIComponent(window.location.href)}`;
 })();
 
 class FinanceApp {
