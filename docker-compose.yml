@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  pugotimoney:
+    build: .
+    container_name: pugotimoney
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./database.sqlite:/app/database.sqlite
+      - ./Extratos:/app/Extratos
+      - ./.env:/app/.env
+      - ./server.log:/app/server.log
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped

@@ -1,0 +1,61 @@
+export declare class Database {
+    private db;
+    constructor();
+    private initializeTables;
+    private runMigrations;
+    private insertDefaultCategories;
+    addTransaction(transaction: any): Promise<number>;
+    getTransactions(filters?: any): Promise<any[]>;
+    updateTransaction(id: number, updates: any): Promise<boolean>;
+    deleteTransaction(id: number): Promise<boolean>;
+    addIncome(income: any): Promise<number>;
+    getIncomes(): Promise<any[]>;
+    updateIncome(id: number, updates: any): Promise<boolean>;
+    deleteIncome(id: number): Promise<boolean>;
+    addUser(user: {
+        username: string;
+        password: string;
+        role: string;
+    }): Promise<number>;
+    getUserByUsername(username: string): Promise<any | null>;
+    getUserCount(): Promise<number>;
+    getUserById(id: number): Promise<any | null>;
+    updateProfile(id: number, data: {
+        bio?: string;
+        location?: string;
+        avatar_url?: string;
+    }): Promise<boolean>;
+    processRecurringTransactions(): Promise<number>;
+    private run;
+    private all;
+    addShoppingItem(item: any): Promise<number>;
+    getShoppingItems(): Promise<any[]>;
+    updateShoppingItem(id: number, updates: any): Promise<boolean>;
+    deleteShoppingItem(id: number): Promise<boolean>;
+    addCreditCard(card: any): Promise<number>;
+    getCreditCards(): Promise<any[]>;
+    updateCreditCard(id: number, updates: any): Promise<boolean>;
+    deleteCreditCard(id: number): Promise<boolean>;
+    addBudget(budget: any): Promise<number>;
+    getBudgets(): Promise<any[]>;
+    updateBudget(id: number, updates: any): Promise<boolean>;
+    deleteBudget(id: number): Promise<boolean>;
+    addInstallment(installment: any): Promise<number>;
+    getInstallments(): Promise<any[]>;
+    updateInstallment(id: number, updates: any): Promise<boolean>;
+    deleteInstallment(id: number): Promise<boolean>;
+    processInstallmentAdvancement(): Promise<number>;
+    addFinancialGoal(goal: any): Promise<number>;
+    getFinancialGoals(): Promise<any[]>;
+    updateFinancialGoal(id: number, updates: any): Promise<boolean>;
+    deleteFinancialGoal(id: number): Promise<boolean>;
+    getCategories(): Promise<any[]>;
+    addCategory(category: any): Promise<number>;
+    getCategoryTotals(type?: 'income' | 'expense' | 'all'): Promise<any[]>;
+    getMonthlySummary(year: number, month: number): Promise<any>;
+    updateCategory(id: number, updates: any): Promise<boolean>;
+    deleteCategory(id: number): Promise<boolean>;
+    close(): void;
+}
+export declare const database: Database;
+//# sourceMappingURL=database.d.ts.map

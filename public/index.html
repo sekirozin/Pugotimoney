@@ -1,0 +1,762 @@
+<html lang="pt-BR"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pugotimoney</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/lucide.min.js"></script>
+    <script src="js/chart.umd.min.js"></script>
+</head>
+<body class="dark-mode">
+    <div id="auth-page" style="display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #0b4db8 0%, #1d7af2 100%);">
+        <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px;">
+            <h2 style="text-align: center; margin-bottom: 8px; color: #333;">💰 Pugotimoney</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 24px;" id="auth-subtitle">Faça login para continuar</p>
+            
+            <form id="login-form" style="display: none;">
+                <div class="form-group">
+                    <label for="login-username">Usuário:</label>
+                    <input type="text" id="login-username" placeholder="Seu usuário" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Senha:</label>
+                    <input type="password" id="login-password" placeholder="Sua senha" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                </div>
+                <button type="submit" class="btn" style="width: 100%; margin-top: 8px;">Entrar</button>
+                <p style="text-align: center; margin-top: 16px; font-size: 13px; color: #666;">
+                    Ainda não tem conta? <a href="#" onclick="showRegister()" style="color: var(--primary);">Registre-se</a>
+                </p>
+            </form>
+
+            <form id="register-form" style="display: none;">
+                <div class="form-group">
+                    <label for="register-username">Usuário:</label>
+                    <input type="text" id="register-username" placeholder="Escolha um usuário" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Senha:</label>
+                    <input type="password" id="register-password" placeholder="Escolha uma senha" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                </div>
+                <button type="submit" class="btn" style="width: 100%; margin-top: 8px;">Criar Conta</button>
+                <p style="text-align: center; margin-top: 16px; font-size: 13px; color: #666;">
+                    Já tem conta? <a href="#" onclick="showLogin()" style="color: var(--primary);">Faça login</a>
+                </p>
+            </form>
+
+            <div id="auth-error" style="display: none; color: #e74c3c; text-align: center; margin-top: 12px; font-size: 13px;"></div>
+        </div>
+    </div>
+
+    <div id="app-content" style="display: none;">
+    <header>
+        <div class="container">
+            <div class="header-top">
+                <h1>💰 Pugotimoney</h1>
+                <div class="profile-area">
+                    <div class="profile-trigger" onclick="toggleProfileMenu()">
+                        <div class="avatar" id="user-avatar">A</div>
+                        <span id="user-name">usuário</span>
+                        <i data-lucide="chevron-down" class="lucide-icon"></i>
+                    </div>
+                    <div class="profile-menu" id="profile-menu">
+                        <div class="profile-menu-header" id="profile-menu-info">
+                            <div class="profile-role" id="user-role">admin</div>
+                        </div>
+                        <div class="profile-menu-item" onclick="openProfileModal()">
+                            <i data-lucide="user" class="lucide-icon"></i> Perfil
+                        </div>
+                        <div class="profile-menu-item" onclick="toggleTheme()">
+                            <i data-lucide="moon" class="lucide-icon"></i> <span id="theme-label">Dark mode</span>
+                        </div>
+                        <div class="profile-menu-item" onclick="logout()">
+                            <i data-lucide="log-out" class="lucide-icon"></i> Sair
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <nav>
+                <button class="nav-btn active" data-page="dashboard">Dashboard</button>
+                <button class="nav-btn" data-page="transactions">Transações</button>
+                <button class="nav-btn" data-page="installments">Parcelamentos</button>
+                <button class="nav-btn" data-page="subscriptions">Assinaturas</button>
+                <button class="nav-btn" data-page="shopping-list">Lista de Compras</button>
+                <button class="nav-btn" data-page="credit-cards">Cartões</button>
+                <button class="nav-btn" data-page="budgets">Orçamentos</button>
+                <button class="nav-btn" data-page="incomes">Receitas</button>
+                <button class="nav-btn" data-page="reports">Relatórios</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="dashboard" class="page active">
+            <h2>Dashboard</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <button class="btn" onclick="downloadStatement()"><i data-lucide="file-text" class="lucide-icon"></i> Baixar Extrato PDF</button>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <label style="font-size: 13px; color: #666;">Mês:</label>
+                    <select id="dashboard-month" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                        <option value="0">Janeiro</option>
+                        <option value="1">Fevereiro</option>
+                        <option value="2">Março</option>
+                        <option value="3">Abril</option>
+                        <option value="4">Maio</option>
+                        <option value="5">Junho</option>
+                        <option value="6">Julho</option>
+                        <option value="7">Agosto</option>
+                        <option value="8">Setembro</option>
+                        <option value="9">Outubro</option>
+                        <option value="10">Novembro</option>
+                        <option value="11">Dezembro</option>
+                    </select>
+                    <label style="font-size: 13px; color: #666;">Ano:</label>
+                    <select id="dashboard-year" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;"></select>
+                </div>
+            </div>
+            <div class="dashboard">
+                <div class="card">
+                    <h3>Saldo Total</h3>
+                    <div class="balance" id="total-balance">R$ 0,00</div>
+                </div>
+                <div class="card">
+                    <h3>Receitas do Mês</h3>
+                    <div class="income" id="monthly-income">R$ 0,00</div>
+                </div>
+                <div class="card">
+                    <h3>Despesas do Mês</h3>
+                    <div class="expense" id="monthly-expenses">R$ 0,00</div>
+                </div>
+            </div>
+
+            <section id="dashboard-commitments" style="margin: 24px 0;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
+                    <div>
+                        <h2 style="margin:0;">Compromissos e compras</h2>
+                        <p style="margin:4px 0 0;color:#666;font-size:13px;">Acompanhe o que já foi pago e o que ainda está pendente.</p>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr;gap:16px;">
+                    <div class="card" id="dashboard-installments-card"></div>
+                    <div class="card" id="dashboard-subscriptions-card"></div>
+                    <div class="card" id="dashboard-shopping-card"></div>
+                </div>
+            </section>
+
+            <div class="charts-container">
+                <div class="chart-container">
+                    <h3>Gráfico de Gastos por Categoria</h3>
+                    <canvas id="category-chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Fluxo de Caixa</h3>
+                    <canvas id="cash-flow-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="transactions" class="page" style="display: none;">
+            <h2>Gerenciador de Transações</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="btn" onclick="openTransactionModal()">Nova Transação</button>
+                    <label class="btn" style="cursor: pointer;">
+                        <i data-lucide="download" class="lucide-icon"></i> Importar Extrato
+                    <input type="file" id="statement-file" accept=".csv,.pdf,text/csv,application/pdf" style="display: none;" onchange="importStatement(this)">
+                </label>
+            </div>
+            
+            <div class="card transaction-filters-card" style="margin-top: 20px;">
+                <div class="filters-header">
+                    <h3>Filtros</h3>
+                    <button class="btn-small" onclick="app.clearTransactionFilters()">Limpar filtros</button>
+                </div>
+                <div class="transaction-filters-grid">
+                    <div class="form-group filter-search">
+                        <label for="filter-search">Buscar:</label>
+                        <input type="search" id="filter-search" placeholder="Descrição, categoria, valor...">
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-type">Tipo:</label>
+                        <select id="filter-type">
+                            <option value="all">Todos</option>
+                            <option value="income">Receitas</option>
+                            <option value="expense">Gastos</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-category">Categoria:</label>
+                        <select id="filter-category">
+                            <option value="all">Todas</option>
+                            <option value="alimentacao">Alimentação</option>
+                            <option value="transporte">Transporte</option>
+                            <option value="moradia">Moradia</option>
+                            <option value="saude">Saúde</option>
+                            <option value="lazer">Lazer</option>
+                            <option value="educacao">Educação</option>
+                            <option value="salario">Salário</option>
+                            <option value="investimentos">Investimentos</option>
+                            <option value="servicos">Serviços</option>
+                            <option value="compras">Compras</option>
+                            <option value="assinaturas">Assinaturas</option>
+                            <option value="eletronicos">Eletrônicos</option>
+                            <option value="outros">Outros</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-period">Período:</label>
+                        <select id="filter-period">
+                            <option value="all">Todos</option>
+                            <option value="month">Mês específico</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </div>
+                    <div class="form-group filter-month-controls" style="display: none;">
+                        <label for="filter-month">Mês:</label>
+                        <select id="filter-month">
+                            <option value="1">Janeiro</option>
+                            <option value="2">Fevereiro</option>
+                            <option value="3">Março</option>
+                            <option value="4">Abril</option>
+                            <option value="5">Maio</option>
+                            <option value="6">Junho</option>
+                            <option value="7">Julho</option>
+                            <option value="8">Agosto</option>
+                            <option value="9">Setembro</option>
+                            <option value="10">Outubro</option>
+                            <option value="11">Novembro</option>
+                            <option value="12">Dezembro</option>
+                        </select>
+                    </div>
+                    <div class="form-group filter-month-controls" style="display: none;">
+                        <label for="filter-year">Ano:</label>
+                        <select id="filter-year"></select>
+                    </div>
+                    <div class="form-group filter-custom-controls" style="display: none;">
+                        <label for="filter-date-start">De:</label>
+                        <input type="date" id="filter-date-start">
+                    </div>
+                    <div class="form-group filter-custom-controls" style="display: none;">
+                        <label for="filter-date-end">Até:</label>
+                        <input type="date" id="filter-date-end">
+                    </div>
+                </div>
+                <div id="transactions-filter-summary" class="filter-summary"></div>
+            </div>
+
+            <div class="card">
+                <h3>Últimas Transações</h3>
+                <div class="transactions-list" id="transactions-list">
+                </div>
+            </div>
+        </div>
+
+        <div id="installments" class="page" style="display: none;">
+            <h2>Parcelamentos</h2>
+            <button class="btn" onclick="openInstallmentModal()">Novo Parcelamento</button>
+            
+            <div class="card" style="margin-top: 20px;">
+                <h3>Parcelamentos Ativos</h3>
+                <div id="installments-list">
+                </div>
+            </div>
+        </div>
+
+        <div id="subscriptions" class="page" style="display: none;">
+            <h2>Assinaturas</h2>
+            <button class="btn" onclick="openSubscriptionModal()">Nova Assinatura</button>
+            
+            <div class="card" style="margin-top: 20px;">
+                <h3>Assinaturas Ativas</h3>
+                <div id="subscriptions-list">
+                </div>
+            </div>
+        </div>
+
+        <div id="shopping-list" class="page" style="display: none;">
+            <h2>Lista de Compras</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button class="btn" onclick="openShoppingItemModal()">Novo Item</button>
+                <select id="shopping-filter" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                    <option value="all">Todos</option>
+                    <option value="active">Não comprados</option>
+                    <option value="purchased">Comprados</option>
+                </select>
+            </div>
+            
+            <div class="card" style="margin-top: 20px;">
+                <h3>Itens na Lista</h3>
+                <div id="shopping-list-items">
+                    <!-- Itens serão carregados aqui -->
+                </div>
+            </div>
+        </div>
+
+        <div id="credit-cards" class="page" style="display: none;">
+            <h2>Cartões de Crédito</h2>
+            <button class="btn" onclick="openCardModal()">Novo Cartão</button>
+            
+            <div class="cards-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px;">
+                <!-- Cartões serão carregados aqui -->
+            </div>
+        </div>
+
+        <div id="budgets" class="page" style="display: none;">
+            <h2>Orçamentos</h2>
+            <button class="btn" onclick="openBudgetModal()">Novo Orçamento</button>
+            
+            <div class="budgets-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px;">
+                <!-- Orçamentos serão carregados aqui -->
+            </div>
+        </div>
+
+        <div id="incomes" class="page" style="display: none;">
+            <h2>Receitas</h2>
+            <button class="btn" onclick="openIncomeModal()">Nova Receita</button>
+            <div id="incomes-list" style="margin-top: 20px;"></div>
+        </div>
+
+        <div id="reports" class="page" style="display: none;">
+            <h2>Relatórios e Análises</h2>
+
+            <div class="card report-export-card">
+                <h3>Baixar Documento</h3>
+                <div class="report-controls">
+                    <div class="form-group">
+                        <label for="report-month">Mês:</label>
+                        <select id="report-month">
+                            <option value="1">Janeiro</option>
+                            <option value="2">Fevereiro</option>
+                            <option value="3">Março</option>
+                            <option value="4">Abril</option>
+                            <option value="5">Maio</option>
+                            <option value="6">Junho</option>
+                            <option value="7">Julho</option>
+                            <option value="8">Agosto</option>
+                            <option value="9">Setembro</option>
+                            <option value="10">Outubro</option>
+                            <option value="11">Novembro</option>
+                            <option value="12">Dezembro</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="report-year">Ano:</label>
+                        <select id="report-year"></select>
+                    </div>
+                </div>
+                <div class="report-section-options">
+                    <label><input type="checkbox" name="report-section" value="installments" checked=""> Parcelamentos</label>
+                    <label><input type="checkbox" name="report-section" value="expenses" checked=""> Gastos</label>
+                    <label><input type="checkbox" name="report-section" value="purchases" checked=""> Compras</label>
+                    <label><input type="checkbox" name="report-section" value="shopping" checked=""> Lista de compras</label>
+                    <label><input type="checkbox" name="report-section" value="budgets" checked=""> Orçamentos</label>
+                    <label><input type="checkbox" name="report-section" value="income"> Receitas</label>
+                    <label><input type="checkbox" name="report-section" value="cards"> Cartões</label>
+                    <label><input type="checkbox" name="report-section" value="goals"> Metas</label>
+                </div>
+                <button class="btn" onclick="downloadSelectedReport()">
+                    <i data-lucide="file-down" class="lucide-icon"></i> Baixar relatório PDF
+                </button>
+            </div>
+            
+            <div class="charts-container">
+                <div class="chart-container">
+                    <h3>Relatório Mensal</h3>
+                    <canvas id="monthly-report-chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Comparativo Anual</h3>
+                    <canvas id="yearly-comparison-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal de Transação -->
+    <div id="transaction-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeTransactionModal()">×</span>
+            <h2>Nova Transação</h2>
+            <form id="transaction-form">
+                <div class="form-group">
+                    <label for="transaction-type">Tipo:</label>
+                    <select id="transaction-type" required="">
+                        <option value="expense">Despesa</option>
+                        <option value="income">Receita</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="transaction-amount">Valor:</label>
+                    <input type="number" id="transaction-amount" step="0.01" required="">
+                </div>
+                <div class="form-group">
+                    <label for="transaction-category">Categoria:</label>
+                    <select id="transaction-category" required="">
+                        <option value="">Selecione...</option>
+                        <option value="alimentacao">Alimentação</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="moradia">Moradia</option>
+                        <option value="saude">Saúde</option>
+                        <option value="lazer">Lazer</option>
+                        <option value="educacao">Educação</option>
+                        <option value="salario">Salário</option>
+                        <option value="investimentos">Investimentos</option>
+                        <option value="servicos">Serviços</option>
+                        <option value="compras">Compras</option>
+                        <option value="assinaturas">Assinaturas</option>
+                        <option value="eletronicos">Eletrônicos</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="transaction-description">Descrição:</label>
+                    <input type="text" id="transaction-description" required="">
+                </div>
+                <div class="form-group">
+                    <label for="transaction-date">Data:</label>
+                    <input type="date" id="transaction-date" required="">
+                </div>
+                <div class="form-group">
+                    <label for="transaction-method">Forma de Pagamento:</label>
+                    <select id="transaction-method" required="" onchange="onPaymentMethodChange()">
+                        <option value="pix">Pix</option>
+                        <option value="dinheiro">Dinheiro</option>
+                        <option value="debito">Débito</option>
+                        <option value="credito">Crédito</option>
+                    </select>
+                </div>
+                <div class="form-group" id="transaction-card-group" style="display: none;">
+                    <label for="transaction-card">Cartão de Crédito:</label>
+                    <select id="transaction-card">
+                        <option value="">Selecione um cartão...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="transaction-recurring" onchange="toggleRecurrenceFields()">
+                        Transação Recorrente
+                    </label>
+                </div>
+                <div id="recurrence-fields" style="display: none;">
+                    <div class="form-group">
+                        <label for="transaction-recurrence-period">Repetir:</label>
+                        <select id="transaction-recurrence-period">
+                            <option value="monthly">Mensalmente</option>
+                            <option value="weekly">Semanalmente</option>
+                            <option value="daily">Diariamente</option>
+                            <option value="yearly">Anualmente</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transaction-recurrence-end">Data Final (opcional):</label>
+                        <input type="date" id="transaction-recurrence-end">
+                    </div>
+                </div>
+                <button type="submit" class="btn">Salvar Transação</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Item de Compra -->
+    <div id="shopping-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeShoppingItemModal()">×</span>
+            <h2>Novo Item na Lista</h2>
+            <form id="shopping-form">
+                <div class="form-group">
+                    <label for="shopping-item">Item:</label>
+                    <input type="text" id="shopping-item" required="">
+                </div>
+                <div class="form-group">
+                    <label for="shopping-category">Categoria:</label>
+                    <select id="shopping-category">
+                        <option value="alimentacao">Alimentação</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="moradia">Moradia</option>
+                        <option value="saude">Saúde</option>
+                        <option value="lazer">Lazer</option>
+                        <option value="educacao">Educação</option>
+                        <option value="jogos">Jogos</option>
+                        <option value="investimentos">Investimentos</option>
+                        <option value="servicos">Serviços</option>
+                        <option value="eletronicos">Eletrônicos</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="shopping-estimated-price">Preço Estimado:</label>
+                    <input type="number" id="shopping-estimated-price" step="0.01">
+                </div>
+                <button type="submit" class="btn">Adicionar Item</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Cartão -->
+    <div id="card-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCardModal()">×</span>
+            <h2>Novo Cartão</h2>
+            <form id="card-form">
+                <div class="form-group">
+                    <label for="card-name">Nome do Cartão:</label>
+                    <input type="text" id="card-name" required="">
+                </div>
+                <div class="form-group">
+                    <label for="card-bank">Banco:</label>
+                    <input type="text" id="card-bank" required="">
+                </div>
+                <div class="form-group">
+                    <label for="card-limit">Limite:</label>
+                    <input type="number" id="card-limit" step="0.01" required="">
+                </div>
+                <div class="form-group">
+                    <label for="card-closing-date">Data de Fechamento:</label>
+                    <input type="date" id="card-closing-date">
+                </div>
+                <div class="form-group">
+                    <label for="card-due-date">Data de Vencimento:</label>
+                    <input type="date" id="card-due-date">
+                </div>
+                <button type="submit" class="btn">Adicionar Cartão</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Detalhes do Cartão -->
+    <div id="card-detail-modal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close" onclick="closeCardDetailModal()">×</span>
+            <h2 id="card-detail-title">Detalhes do Cartão</h2>
+            <div id="card-detail-info" class="card" style="margin-bottom: 20px;">
+                <h3 id="card-detail-name"></h3>
+                <p><strong>Banco:</strong> <span id="card-detail-bank"></span></p>
+                <p><strong>Limite:</strong> R$ <span id="card-detail-limit"></span></p>
+                <p><strong>Disponível:</strong> R$ <span id="card-detail-available"></span></p>
+                <p><strong>Fechamento:</strong> <span id="card-detail-closing"></span></p>
+                <p><strong>Vencimento:</strong> <span id="card-detail-due"></span></p>
+                <div style="margin-top: 10px;">
+                    <div style="background: #e0e0e0; height: 10px; border-radius: 5px; overflow: hidden;">
+                        <div id="card-detail-bar" style="background: #4CAF50; height: 100%; width: 0%;"></div>
+                    </div>
+                </div>
+                <button class="btn" style="margin-top: 14px;" onclick="importCardInvoice(app.cardDetailId)">
+                    <i data-lucide="upload" class="lucide-icon"></i> Enviar Fatura
+                </button>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="margin: 0;">Compras do Mês</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <label style="font-size: 13px; color: #666;">Mês:</label>
+                    <select id="card-detail-month" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;" onchange="app.refreshCardDetail()">
+                    </select>
+                    <select id="card-detail-year" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;" onchange="app.refreshCardDetail()">
+                    </select>
+                </div>
+            </div>
+            <div id="card-detail-transactions"></div>
+        </div>
+    </div>
+
+    <!-- Modal de Orçamento -->
+    <div id="budget-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeBudgetModal()">×</span>
+            <h2>Novo Orçamento</h2>
+            <form id="budget-form">
+                <div class="form-group">
+                    <label for="budget-category">Categoria:</label>
+                    <select id="budget-category" required="">
+                        <option value="">Selecione...</option>
+                        <option value="alimentacao">Alimentação</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="moradia">Moradia</option>
+                        <option value="saude">Saúde</option>
+                        <option value="lazer">Lazer</option>
+                        <option value="educacao">Educação</option>
+                        <option value="salario">Salário</option>
+                        <option value="investimentos">Investimentos</option>
+                        <option value="servicos">Serviços</option>
+                        <option value="compras">Compras</option>
+                        <option value="assinaturas">Assinaturas</option>
+                        <option value="eletronicos">Eletrônicos</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="budget-amount">Valor do Orçamento:</label>
+                    <input type="number" id="budget-amount" step="0.01" required="">
+                </div>
+                <div class="form-group">
+                    <label for="budget-period">Período:</label>
+                    <select id="budget-period" required="">
+                        <option value="monthly">Mensal</option>
+                        <option value="weekly">Semanal</option>
+                        <option value="yearly">Anual</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Criar Orçamento</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Parcelamento -->
+    <div id="installment-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeInstallmentModal()">×</span>
+            <h2>Novo Parcelamento</h2>
+            <form id="installment-form">
+                <div class="form-group">
+                    <label for="installment-description">Descrição:</label>
+                    <input type="text" id="installment-description" required="">
+                </div>
+                <div class="form-group">
+                    <label for="installment-total">Valor Total:</label>
+                    <input type="number" id="installment-total" step="0.01" required="">
+                </div>
+                <div class="form-group">
+                    <label for="installment-amount">Valor da Parcela:</label>
+                    <input type="number" id="installment-amount" step="0.01" required="">
+                </div>
+                <div class="form-group">
+                    <label for="installment-count">Número de Parcelas:</label>
+                    <input type="number" id="installment-count" required="">
+                </div>
+                <div class="form-group">
+                    <label for="installment-current">Parcela Atual:</label>
+                    <input type="number" id="installment-current" value="0" required="">
+                </div>
+                <div class="form-group">
+                    <label for="installment-start">Data de Início:</label>
+                    <input type="date" id="installment-start" required="">
+                </div>
+                <div class="form-group">
+                    <label for="installment-category">Categoria:</label>
+                    <select id="installment-category">
+                        <option value="alimentacao">Alimentação</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="moradia">Moradia</option>
+                        <option value="saude">Saúde</option>
+                        <option value="lazer">Lazer</option>
+                        <option value="educacao">Educação</option>
+                        <option value="investimentos">Investimentos</option>
+                        <option value="servicos">Serviços</option>
+                        <option value="compras">Compras</option>
+                        <option value="eletronicos">Eletrônicos</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Salvar Parcelamento</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Receita -->
+    <div id="income-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeIncomeModal()">×</span>
+            <h2>Nova Receita</h2>
+            <form id="income-form">
+                <div class="form-group">
+                    <label for="income-description">Descrição:</label>
+                    <input type="text" id="income-description" placeholder="Ex: Salário, Freelance..." required="">
+                </div>
+                <div class="form-group">
+                    <label for="income-amount">Valor:</label>
+                    <input type="number" id="income-amount" step="0.01" required="">
+                </div>
+                <div class="form-group">
+                    <label for="income-category">Categoria:</label>
+                    <select id="income-category">
+                        <option value="salario">Salário</option>
+                        <option value="autonomo">Autônomo</option>
+                        <option value="freelance">Freelance</option>
+                        <option value="investimentos">Investimentos</option>
+                        <option value="presente">Presente</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="income-date">Data:</label>
+                    <input type="date" id="income-date" required="">
+                </div>
+                <button type="submit" class="btn">Salvar Receita</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Assinatura -->
+    <div id="subscription-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeSubscriptionModal()">×</span>
+            <h2>Nova Assinatura</h2>
+            <form id="subscription-form">
+                <div class="form-group">
+                    <label for="subscription-name">Nome:</label>
+                    <input type="text" id="subscription-name" placeholder="Ex: Netflix, Spotify..." required="">
+                </div>
+                <div class="form-group">
+                    <label for="subscription-amount">Valor Mensal:</label>
+                    <input type="number" id="subscription-amount" step="0.01" required="">
+                </div>
+                <div class="form-group">
+                    <label for="subscription-category">Categoria:</label>
+                    <select id="subscription-category">
+                        <option value="assinaturas">Assinaturas</option>
+                        <option value="streaming">Streaming</option>
+                        <option value="musica">Música</option>
+                        <option value="software">Software</option>
+                        <option value="telecomunicacoes">Telecomunicações</option>
+                        <option value="jogos">Jogos</option>
+                        <option value="servicos">Serviços</option>
+                        <option value="outros">Outros</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Salvar Assinatura</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Perfil -->
+    <div id="profile-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close" onclick="closeProfileModal()">×</span>
+            <h2 style="text-align: center; margin-bottom: 24px;">Meu Perfil</h2>
+            <div id="profile-info">
+                <div class="profile-header-card">
+                    <div class="profile-avatar-wrapper">
+                        <div class="profile-avatar" id="profile-avatar">A</div>
+                    </div>
+                    <h3 id="profile-username" class="profile-name">usuário</h3>
+                    <span id="profile-role-badge" class="profile-badge">admin</span>
+                    <p class="profile-member-since" id="profile-member-since"></p>
+                </div>
+
+                <div class="profile-section">
+                    <h4 class="profile-section-title">
+                        <i data-lucide="info" class="lucide-icon"></i> Sobre
+                    </h4>
+                    <div class="form-group">
+                        <label for="profile-bio">Biografia</label>
+                        <textarea id="profile-bio" rows="4" placeholder="Conte um pouco sobre você..." class="profile-input"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="profile-location">
+                            <i data-lucide="map-pin" class="lucide-icon"></i> Localização
+                        </label>
+                        <input type="text" id="profile-location" placeholder="Cidade, Estado" class="profile-input">
+                    </div>
+                </div>
+
+                <button class="btn profile-save-btn" onclick="saveProfile()">
+                    <i data-lucide="save" class="lucide-icon"></i> Salvar Perfil
+                </button>
+            </div>
+        </div>
+    </div>
+
+    </div><!-- fim app-content -->
+
+    <script src="js/app.js"></script>
+
+
+</body><div id="codex-browser-sidebar-comments-root" style="position: fixed; inset: 0px; pointer-events: none; z-index: 2147483000;"></div></html>
