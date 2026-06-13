@@ -1,27 +1,53 @@
 import { Request, Response } from 'express';
-import { Database } from '../models/database';
 
-const db = new Database();
+const profileUrl = process.env.PUGOTILAB_PROFILE_URL
+    || 'http://pugotilab-auth:8080/auth/api/profile';
 
-export async function getProfile(req: Request, res: Response) {
+async function proxyProfile(
+    req: Request,
+    res: Response,
+    method: 'GET' | 'PATCH',
+    body?: Record<string, unknown>
+) {
     try {
-        const user = await db.getUserById((req as any).user.id);
-        if (!user) {
-            return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
+        const response = await fetch(profileUrl, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                Cookie: req.headers.cookie || ''
+            },
+            body: body ? JSON.stringify(body) : undefined
+        });
+        const payload = await response.json() as {
+            profile?: unknown;
+            error?: string;
+        };
+        if (!response.ok || !payload.profile) {
+            return res.status(response.status).json({
+                success: false,
+                error: payload.error || 'Perfil Pugotilab indisponível'
+            });
         }
-        res.json({ success: true, data: user });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+        res.json({ success: true, data: payload.profile });
+    } catch (error) {
+        console.error('Erro ao acessar Pugotiprofile:', error);
+        res.status(502).json({
+            success: false,
+            error: 'Não foi possível acessar o perfil Pugotilab'
+        });
     }
 }
 
+export async function getProfile(req: Request, res: Response) {
+    return proxyProfile(req, res, 'GET');
+}
+
 export async function updateProfile(req: Request, res: Response) {
-    try {
-        const { bio, location, avatar_url } = req.body;
-        await db.updateProfile((req as any).user.id, { bio, location, avatar_url });
-        const user = await db.getUserById((req as any).user.id);
-        res.json({ success: true, data: user });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    const { nickname, avatarUrl, biography, location } = req.body;
+    return proxyProfile(req, res, 'PATCH', {
+        nickname,
+        avatarUrl,
+        biography,
+        location
+    });
 }

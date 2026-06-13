@@ -9,6 +9,10 @@ type PugotiLabSession = {
     sub: string;
     username: string;
     displayName?: string;
+    nickname?: string;
+    avatarUrl?: string;
+    biography?: string;
+    location?: string;
     email?: string;
     role: string;
     iss: string;
@@ -52,7 +56,17 @@ class AuthController {
             const localToken = generateToken({ id: user.id, username: user.username, role: user.role });
             res.json({
                 success: true,
-                data: { id: user.id, username: user.username, role: user.role, token: localToken }
+                data: {
+                    id: user.id,
+                    username: user.username,
+                    role: user.role,
+                    displayName: session.displayName || session.username,
+                    nickname: session.nickname || '',
+                    avatarUrl: session.avatarUrl || '',
+                    biography: session.biography || '',
+                    location: session.location || '',
+                    token: localToken
+                }
             });
         } catch {
             res.status(401).json({ success: false, error: 'Sessão PugotiLab inválida ou expirada' });

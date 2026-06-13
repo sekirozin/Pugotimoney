@@ -131,15 +131,49 @@ function hideAuth() {
     document.getElementById('auth-page').style.display = 'none';
     document.getElementById('app-content').style.display = 'block';
     updateProfileInfo();
+    void refreshPugotiProfile();
+}
+
+function profileLabel(user) {
+    return user.nickname || user.displayName || user.username;
+}
+
+function setProfileAvatar(element, user) {
+    if (!element) return;
+    const label = profileLabel(user);
+    element.textContent = label.charAt(0).toUpperCase();
+    element.style.backgroundImage = '';
+    element.dataset.avatarUrl = user.avatarUrl || '';
+    if (user.avatarUrl) {
+        element.textContent = '';
+        element.style.backgroundImage = `url("${String(user.avatarUrl).replaceAll('"', '%22')}")`;
+    }
+}
+
+async function refreshPugotiProfile() {
+    try {
+        const response = await fetch('/api/profile');
+        const data = await response.json();
+        if (!data.success) return null;
+        const user = {
+            ...JSON.parse(localStorage.getItem('authUser') || '{}'),
+            ...data.data
+        };
+        localStorage.setItem('authUser', JSON.stringify(user));
+        updateProfileInfo();
+        return data.data;
+    } catch {
+        return null;
+    }
 }
 
 function updateProfileInfo() {
     const userData = localStorage.getItem('authUser');
     if (!userData) return;
     const user = JSON.parse(userData);
-    document.getElementById('user-name').textContent = user.username;
+    document.getElementById('user-name').textContent = profileLabel(user);
     document.getElementById('user-role').textContent = user.role;
-    document.getElementById('user-avatar').textContent = user.username.charAt(0).toUpperCase();
+    setProfileAvatar(document.getElementById('user-avatar'), user);
     const badge = document.getElementById('user-role');
     badge.textContent = user.role;
     badge.style.background = user.role === 'admin' ? '#f5576c' : '#667eea';
@@ -176,21 +210,30 @@ async function openProfileModal() {
     const userData = localStorage.getItem('authUser');
     if (userData) {
         const user = JSON.parse(userData);
-        document.getElementById('profile-username').textContent = user.username;
+        document.getElementById('profile-username').textContent = profileLabel(user);
         const badge = document.getElementById('profile-role-badge');
         badge.textContent = user.role;
         badge.setAttribute('data-role', user.role);
-        document.getElementById('profile-avatar').textContent = user.username.charAt(0).toUpperCase();
+        setProfileAvatar(document.getElementById('profile-avatar'), user);
     }
 
     try {
         const res = await fetch('/api/profile');
         const data = await res.json();
         if (data.success) {
-            document.getElementById('profile-bio').value = data.data.bio || '';
+            const profile = data.data;
+            document.getElementById('profile-username').textContent = profileLabel(profile);
+            document.getElementById('profile-nickname').value = profile.nickname || '';
+            document.getElementById('profile-bio').value = profile.biography || '';
             document.getElementById('profile-location').value = data.data.location || '';
-            if (data.data.created_at) {
-                const d = new Date(data.data.created_at);
+            setProfileAvatar(document.getElementById('profile-avatar'), profile);
+            localStorage.setItem('authUser', JSON.stringify({
+                ...JSON.parse(localStorage.getItem('authUser') || '{}'),
+                ...profile
+            }));
+            updateProfileInfo();
+            if (data.data.createdAt) {
+                const d = new Date(data.data.createdAt);
                 document.getElementById('profile-member-since').textContent =
                     `Membro desde ${d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`;
             }
@@ -205,16 +248,23 @@ function closeProfileModal() {
 }
 
 async function saveProfile() {
-    const bio = document.getElementById('profile-bio').value.trim();
+    const nickname = document.getElementById('profile-nickname').value.trim();
+    const biography = document.getElementById('profile-bio').value.trim();
     const location = document.getElementById('profile-location').value.trim();
+    const avatarUrl = document.getElementById('profile-avatar').dataset.avatarUrl || '';
     try {
         const res = await fetch('/api/profile', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bio, location })
+            body: JSON.stringify({ nickname, biography, location, avatarUrl })
         });
         const data = await res.json();
         if (data.success) {
+            localStorage.setItem('authUser', JSON.stringify({
+                ...JSON.parse(localStorage.getItem('authUser') || '{}'),
+                ...data.data
+            }));
+            updateProfileInfo();
             closeProfileModal();
         } else {
             alert(data.error || 'Erro ao salvar perfil');
@@ -223,6 +273,28 @@ async function saveProfile() {
         alert('Erro ao conectar ao servidor');
     }
 }
+
+document.getElementById('profile-avatar-file')?.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 350000) {
+        alert('Use uma imagem de até 350 KB.');
+        event.target.value = '';
+        return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+        const avatarUrl = String(reader.result || '');
+        const avatar = document.getElementById('profile-avatar');
+        avatar.dataset.avatarUrl = avatarUrl;
+        setProfileAvatar(avatar, {
+            nickname: document.getElementById('profile-nickname').value,
+            username: document.getElementById('profile-username').textContent,
+            avatarUrl
+        });
+    });
+    reader.readAsDataURL(file);
+});
 
 // Inicialização: verificar autenticação
 (async function() {

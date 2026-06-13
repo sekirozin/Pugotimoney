@@ -99,6 +99,8 @@ header h1 {
     font-size: 16px;
     color: white;
     text-transform: uppercase;
+    background-position: center;
+    background-size: cover;
 }
 
 #user-name {
@@ -668,6 +670,8 @@ nav button:hover, nav button.active {
     font-size: 32px;
     font-weight: 700;
     box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    background-position: center;
+    background-size: cover;
 }
 
 .profile-name {
@@ -755,6 +759,12 @@ nav button:hover, nav button.active {
 
 #profile-info textarea {
     font-family: inherit;
+}
+
+.profile-shared-note {
+    margin: 8px 0 0;
+    color: #777;
+    font-size: 12px;
 }
 
 .report-export-card {

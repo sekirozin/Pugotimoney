@@ -11,6 +11,7 @@ services:
       - ./server.log:/app/server.log
     environment:
       - NODE_ENV=production
+      - PUGOTILAB_PROFILE_URL=http://pugotilab-auth:8080/auth/api/profile
     networks:
       - default
       - pugotilab
