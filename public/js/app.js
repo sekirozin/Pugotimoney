@@ -649,10 +649,10 @@ class FinanceApp {
         const openItems = shopping.filter(item => !item.purchased);
         const purchasedItems = shopping.filter(item => item.purchased);
         const openTotal = openItems.reduce((sum, item) => sum + Number(item.estimatedPrice || item.estimated_price || 0), 0);
-        const shoppingItems = shopping.map(item => {
+        const shoppingItems = openItems.map(item => {
             const purchased = Boolean(item.purchased);
             return `<div style="${listStyle}${purchased ? 'opacity:.65;' : ''}"><span><strong style="${purchased ? 'text-decoration:line-through;' : ''}">${esc(item.item)}</strong><br><small>${esc(this.getCategoryName(item.category))} · ${purchased ? 'Comprado' : 'Pendente'}</small></span><strong>${money(item.estimatedPrice || item.estimated_price)}</strong></div>`;
-        }).join('') || '<p style="color:#666;font-size:13px;">Nenhum item cadastrado.</p>';
+        }).join('') || '<p style="color:#666;font-size:13px;">Nenhum item pendente.</p>';
         const shoppingCard = document.getElementById('dashboard-shopping-card');
         if (shoppingCard) shoppingCard.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><h3 style="margin:0;">Lista de compras</h3><button class="btn-small" onclick="app.navigateTo('shopping-list')">Abrir lista</button></div>
