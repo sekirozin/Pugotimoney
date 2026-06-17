@@ -62,6 +62,32 @@ header h1 {
     margin-bottom: 0;
 }
 
+.brand-title,
+.auth-brand-title {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.brand-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+}
+
+.auth-brand-title {
+    width: 100%;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.auth-brand-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+}
+
 .header-top {
     display: flex;
     justify-content: space-between;
