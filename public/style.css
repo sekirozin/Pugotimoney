@@ -307,6 +307,25 @@ nav button:hover, nav button.active {
     background: #15803d;
 }
 
+.installment-paid-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 7px 14px;
+    border: 1px solid var(--success);
+    border-radius: 6px;
+    background: var(--success);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.installment-paid-label .lucide-icon {
+    width: 15px;
+    height: 15px;
+}
+
 .btn-danger {
     background: #e74c3c;
 }

@@ -47,6 +47,7 @@ export interface Installment {
     description: string;
     totalAmount: number;
     installmentAmount: number;
+    installmentAmounts?: number[] | null;
     totalInstallments: number;
     currentInstallment: number;
     startDate: string;

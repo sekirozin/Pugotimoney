@@ -1320,7 +1320,9 @@ class FinanceApp {
                     </div>
                     <p style="font-size: 12px; color: var(--muted); margin-top: 4px;">${progress.toFixed(0)}% pago</p>
                 </div>
-                ${!isCompleted && !isCurrentMonthPaid ? `<button class="btn" style="margin-top: 10px; padding: 5px 15px; font-size: 12px;" onclick="markInstallmentPaid(${inst.id})"><i data-lucide="check" class="lucide-icon"></i> Marcar Parcela como Paga</button>` : ''}
+                ${isCurrentMonthPaid
+                    ? '<span class="installment-paid-label"><i data-lucide="check-circle-2" class="lucide-icon"></i> Parcela paga</span>'
+                    : `<button class="btn" style="margin-top: 10px; padding: 5px 15px; font-size: 12px;" onclick="markInstallmentPaid(${inst.id})"><i data-lucide="check" class="lucide-icon"></i> Marcar Parcela como Paga</button>`}
             `;
             list.appendChild(item);
         });

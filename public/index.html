@@ -2,8 +2,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pugotimoney</title>
-    <link rel="icon" type="image/svg+xml" href="/pugotimoney-icon.svg?v=20260617-1">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260619-1">
+    <link rel="stylesheet" href="css/style.css?v=20260618-17">
     <script src="js/lucide.min.js"></script>
     <script src="js/chart.umd.min.js"></script>
 </head>
@@ -53,23 +53,26 @@
             <div class="header-top">
                 <h1 class="brand-title"><img src="/pugotimoney-icon.svg" alt="" class="brand-icon"> Pugotimoney</h1>
                 <div class="profile-area">
+                    <button type="button" class="theme-toggle-button" id="theme-toggle-button" onclick="toggleTheme()" title="Alternar tema">
+                        <i data-lucide="sun" class="lucide-icon" id="theme-toggle-icon"></i>
+                    </button>
                     <div class="profile-trigger" onclick="toggleProfileMenu()">
                         <div class="avatar" id="user-avatar">A</div>
-                        <span id="user-name">usuário</span>
                         <i data-lucide="chevron-down" class="lucide-icon"></i>
                     </div>
                     <div class="profile-menu" id="profile-menu">
                         <div class="profile-menu-header" id="profile-menu-info">
-                            <div class="profile-role" id="user-role">admin</div>
+                            <div class="profile-menu-avatar avatar" id="profile-menu-avatar">A</div>
+                            <div>
+                                <strong id="user-name">usuário</strong>
+                                <div class="profile-role" id="user-role">Administrador</div>
+                            </div>
                         </div>
                         <div class="profile-menu-item" onclick="openProfileModal()">
-                            <i data-lucide="user" class="lucide-icon"></i> Perfil
-                        </div>
-                        <div class="profile-menu-item" onclick="toggleTheme()">
-                            <i data-lucide="moon" class="lucide-icon"></i> <span id="theme-label">Dark mode</span>
+                            Perfil
                         </div>
                         <div class="profile-menu-item" onclick="logout()">
-                            <i data-lucide="log-out" class="lucide-icon"></i> Sair
+                            Logout
                         </div>
                     </div>
                 </div>
@@ -612,16 +615,23 @@
                 </div>
                 <div class="form-group">
                     <label for="installment-total">Valor Total:</label>
-                    <input type="number" id="installment-total" step="0.01" required="">
+                    <input type="number" id="installment-total" step="0.01">
                 </div>
                 <div class="form-group">
                     <label for="installment-amount">Valor da Parcela:</label>
-                    <input type="number" id="installment-amount" step="0.01" required="">
+                    <input type="number" id="installment-amount" step="0.01">
                 </div>
                 <div class="form-group">
                     <label for="installment-count">Número de Parcelas:</label>
                     <input type="number" id="installment-count" required="">
                 </div>
+                <div class="form-group installment-custom-toggle">
+                    <input type="checkbox" id="installment-custom-enabled" hidden>
+                    <button type="button" id="installment-custom-toggle-btn" class="btn-secondary" aria-pressed="false">
+                        Parcelas diferentes
+                    </button>
+                </div>
+                <div id="installment-custom-amounts" class="installment-custom-amounts" style="display: none;"></div>
                 <div class="form-group">
                     <label for="installment-current">Parcela Atual:</label>
                     <input type="number" id="installment-current" value="0" required="">
@@ -766,7 +776,7 @@
 
     </div><!-- fim app-content -->
 
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=20260618-17"></script>
 
 
-</body><div id="codex-browser-sidebar-comments-root" style="position: fixed; inset: 0px; pointer-events: none; z-index: 2147483000;"></div></html>
+</body></html>

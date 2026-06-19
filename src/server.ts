@@ -77,7 +77,18 @@ const apiLimiter = rateLimit({
 });
 
 // Servir arquivos estáticos
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '../public'), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+            return;
+        }
+
+        if (/\.(?:css|js|svg|png|jpg|jpeg|webp|ico)$/i.test(filePath)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+    }
+}));
 
 // Rotas públicas (com rate limit restritivo)
 app.use('/api/auth', authLimiter, authRoutes);

@@ -69,6 +69,7 @@ export class Database {
                         description TEXT NOT NULL,
                         total_amount REAL NOT NULL,
                         installment_amount REAL NOT NULL,
+                        installment_amounts TEXT,
                         total_installments INTEGER NOT NULL,
                         current_installment INTEGER DEFAULT 0,
                         start_date TEXT NOT NULL,
@@ -146,6 +147,7 @@ export class Database {
             "ALTER TABLE credit_cards ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE budgets ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE installments ADD COLUMN user_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE installments ADD COLUMN installment_amounts TEXT",
             "ALTER TABLE financial_goals ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE incomes ADD COLUMN user_id INTEGER REFERENCES users(id)"
         ];
@@ -783,17 +785,19 @@ export class Database {
 
     async addInstallment(installment: any, userId?: number): Promise<number> {
         return new Promise((resolve, reject) => {
+            const installmentAmounts = this.serializeInstallmentAmounts(installment);
             const stmt = this.db.prepare(`
                 INSERT INTO installments (
-                    description, total_amount, installment_amount, total_installments,
+                    description, total_amount, installment_amount, installment_amounts, total_installments,
                     current_installment, start_date, category, credit_card_id, user_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
             
             stmt.run(
                 installment.description,
                 installment.totalAmount ?? installment.total_amount,
                 installment.installmentAmount ?? installment.installment_amount,
+                installmentAmounts,
                 installment.totalInstallments ?? installment.total_installments,
                 0,
                 installment.startDate ?? installment.start_date,
@@ -829,6 +833,7 @@ export class Database {
                         ...row,
                         totalAmount: row.total_amount,
                         installmentAmount: row.installment_amount,
+                        installmentAmounts: this.parseInstallmentAmounts(row.installment_amounts),
                         totalInstallments: row.total_installments,
                         currentInstallment: row.current_installment,
                         startDate: row.start_date,
@@ -844,6 +849,7 @@ export class Database {
             const description = updates.description;
             const totalAmount = updates.totalAmount ?? updates.total_amount;
             const installmentAmount = updates.installmentAmount ?? updates.installment_amount;
+            const installmentAmounts = this.serializeInstallmentAmounts(updates);
             const totalInstallments = updates.totalInstallments ?? updates.total_installments;
             const currentInstallment = updates.currentInstallment ?? updates.current_installment;
             const category = updates.category;
@@ -855,6 +861,7 @@ export class Database {
                 SET description = ?,
                     total_amount = ?,
                     installment_amount = ?,
+                    installment_amounts = ?,
                     total_installments = ?,
                     current_installment = ?,
                     category = ?,
@@ -867,6 +874,7 @@ export class Database {
                 description,
                 totalAmount,
                 installmentAmount,
+                installmentAmounts,
                 totalInstallments,
                 currentInstallment,
                 category,
@@ -910,6 +918,34 @@ export class Database {
 
             stmt.finalize();
         });
+    }
+
+    private serializeInstallmentAmounts(installment: any): string | null {
+        const raw = installment.installmentAmounts ?? installment.installment_amounts;
+        if (!Array.isArray(raw)) return null;
+
+        const totalInstallments = Number(installment.totalInstallments ?? installment.total_installments ?? raw.length);
+        const amounts = raw
+            .slice(0, totalInstallments)
+            .map((value: any) => Number(value))
+            .map((value: number) => Number.isFinite(value) ? Math.round(value * 100) / 100 : 0);
+
+        if (amounts.length !== totalInstallments || amounts.some((value: number) => value < 0)) return null;
+        return JSON.stringify(amounts);
+    }
+
+    private parseInstallmentAmounts(value: string | null): number[] | null {
+        if (!value) return null;
+
+        try {
+            const parsed = JSON.parse(value);
+            if (!Array.isArray(parsed)) return null;
+            return parsed
+                .map((amount: any) => Number(amount))
+                .filter((amount: number) => Number.isFinite(amount) && amount >= 0);
+        } catch {
+            return null;
+        }
     }
 
     async deleteInstallment(id: number, userId?: number): Promise<boolean> {

@@ -18,19 +18,23 @@ function esc(str) {
 function applyTheme(theme) {
     const isDark = theme === 'dark';
     document.body.classList.toggle('dark-mode', isDark);
-    const label = document.getElementById('theme-label');
-    if (label) label.textContent = isDark ? 'Light mode' : 'Dark mode';
+    const button = document.getElementById('theme-toggle-button');
+    const icon = document.getElementById('theme-toggle-icon');
+    if (button) {
+        button.title = isDark ? 'Ativar modo claro' : 'Ativar modo escuro';
+        button.setAttribute('aria-label', button.title);
+    }
+    if (icon) icon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
 }
 
 function toggleTheme() {
     const nextTheme = document.body.classList.contains('dark-mode') ? 'light' : 'dark';
-    localStorage.setItem('theme', nextTheme);
     applyTheme(nextTheme);
     document.getElementById('profile-menu')?.classList.remove('open');
     window.app?.refreshIcons();
 }
 
-applyTheme(localStorage.getItem('theme') || 'light');
+applyTheme('dark');
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('login-form')?.addEventListener('submit', (event) => {
@@ -138,6 +142,10 @@ function profileLabel(user) {
     return user.nickname || user.displayName || user.username;
 }
 
+function profileRoleLabel(role) {
+    return role === 'admin' ? 'Administrador' : 'Usuário';
+}
+
 function setProfileAvatar(element, user) {
     if (!element) return;
     const label = profileLabel(user);
@@ -172,11 +180,11 @@ function updateProfileInfo() {
     if (!userData) return;
     const user = JSON.parse(userData);
     document.getElementById('user-name').textContent = profileLabel(user);
-    document.getElementById('user-role').textContent = user.role;
+    document.getElementById('user-role').textContent = profileRoleLabel(user.role);
     setProfileAvatar(document.getElementById('user-avatar'), user);
+    setProfileAvatar(document.getElementById('profile-menu-avatar'), user);
     const badge = document.getElementById('user-role');
-    badge.textContent = user.role;
-    badge.style.background = user.role === 'admin' ? '#f5576c' : '#667eea';
+    badge.textContent = profileRoleLabel(user.role);
 }
 
 function toggleProfileMenu() {
@@ -344,6 +352,7 @@ class FinanceApp {
         this.selectedMonth = new Date().getMonth();
         this.selectedYear = new Date().getFullYear();
         this.shoppingFilter = 'all';
+        this.installmentPreviewIndexes = {};
         
         this.init();
     }
@@ -413,6 +422,17 @@ class FinanceApp {
         addListener('card-form', 'submit', (e) => { e.preventDefault(); this.addCreditCard(); });
         addListener('budget-form', 'submit', (e) => { e.preventDefault(); this.addBudget(); });
         addListener('installment-form', 'submit', (e) => { e.preventDefault(); this.addInstallment(); });
+        addListener('installment-total', 'input', () => { this.lastInstallmentEditedField = 'total'; this.syncInstallmentTotals(); });
+        addListener('installment-count', 'input', () => { this.syncInstallmentTotals(); this.renderInstallmentAmountFields(); });
+        addListener('installment-amount', 'input', () => { this.lastInstallmentEditedField = 'amount'; this.syncInstallmentTotals(); this.renderInstallmentAmountFields(); });
+        addListener('installment-start', 'change', () => { this.renderInstallmentAmountFields(); });
+        addListener('installment-custom-enabled', 'change', () => { this.toggleCustomInstallmentAmounts(); });
+        addListener('installment-custom-toggle-btn', 'click', () => {
+            const customEnabled = document.getElementById('installment-custom-enabled');
+            if (!customEnabled) return;
+            customEnabled.checked = !customEnabled.checked;
+            this.toggleCustomInstallmentAmounts();
+        });
         addListener('subscription-form', 'submit', (e) => { e.preventDefault(); this.addSubscription(); });
         addListener('income-form', 'submit', (e) => { e.preventDefault(); this.addIncome(); });
 
@@ -601,18 +621,17 @@ class FinanceApp {
 
         const installments = this.installments || [];
         const installmentTotals = installments.reduce((totals, inst) => {
-            const amount = Number(inst.installmentAmount || inst.installment_amount || 0);
             const total = Number(inst.totalInstallments || inst.total_installments || 0);
             const paid = Math.max(0, Math.min(Number(inst.currentInstallment ?? inst.current_installment ?? 0), total));
-            totals.paid += paid * amount;
-            totals.pending += Math.max(total - paid, 0) * amount;
+            totals.paid += this.sumInstallmentAmounts(inst, 0, paid);
+            totals.pending += this.sumInstallmentAmounts(inst, paid, total);
             return totals;
         }, { paid: 0, pending: 0 });
         const installmentItems = installments.map(inst => {
-            const amount = Number(inst.installmentAmount || inst.installment_amount || 0);
             const total = Number(inst.totalInstallments || inst.total_installments || 0);
             const paid = Math.max(0, Math.min(Number(inst.currentInstallment ?? inst.current_installment ?? 0), total));
-            return `<div style="${listStyle}"><span><strong>${esc(inst.description)}</strong><br><small>${paid} de ${total} pagas</small></span><span style="text-align:right;">${money(amount)}<br><small>por parcela</small></span></div>`;
+            const nextAmount = this.getInstallmentAmountAt(inst, paid);
+            return `<div style="${listStyle}"><span><strong>${esc(inst.description)}</strong><br><small>${paid} de ${total} pagas</small></span><span style="text-align:right;">${money(nextAmount)}<br><small>próxima parcela</small></span></div>`;
         }).join('') || '<p style="color:#666;font-size:13px;">Nenhum parcelamento cadastrado.</p>';
         const installmentsCard = document.getElementById('dashboard-installments-card');
         if (installmentsCard) installmentsCard.innerHTML = `
@@ -1392,6 +1411,162 @@ class FinanceApp {
         this.refreshIcons();
     }
 
+    parseInstallmentAmounts(inst) {
+        const raw = inst?.installmentAmounts ?? inst?.installment_amounts;
+        if (Array.isArray(raw)) return raw.map(Number).filter(amount => Number.isFinite(amount) && amount >= 0);
+        if (typeof raw === 'string' && raw.trim()) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed.map(Number).filter(amount => Number.isFinite(amount) && amount >= 0);
+            } catch (error) {
+                return [];
+            }
+        }
+        return [];
+    }
+
+    getInstallmentAmountAt(inst, index) {
+        const amounts = this.parseInstallmentAmounts(inst);
+        const amount = amounts[index];
+        if (Number.isFinite(amount)) return amount;
+        return Number(inst?.installmentAmount ?? inst?.installment_amount ?? 0);
+    }
+
+    sumInstallmentAmounts(inst, start, end) {
+        let total = 0;
+        for (let i = start; i < end; i++) {
+            total += this.getInstallmentAmountAt(inst, i);
+        }
+        return total;
+    }
+
+    syncInstallmentTotals() {
+        const totalInput = document.getElementById('installment-total');
+        const countInput = document.getElementById('installment-count');
+        const amountInput = document.getElementById('installment-amount');
+        const customEnabled = document.getElementById('installment-custom-enabled');
+        if (!totalInput || !countInput || !amountInput || customEnabled?.checked) return;
+
+        const total = Number(totalInput.value);
+        const count = Number(countInput.value);
+        const amount = Number(amountInput.value);
+
+        if (this.lastInstallmentEditedField === 'amount' && Number.isFinite(amount) && Number.isFinite(count) && count > 0) {
+            totalInput.value = (Math.round((amount * count) * 100) / 100).toFixed(2);
+            return;
+        }
+
+        if (Number.isFinite(total) && Number.isFinite(count) && count > 0) {
+            amountInput.value = (Math.round((total / count) * 100) / 100).toFixed(2);
+        }
+    }
+
+    syncDefaultInstallmentAmount() {
+        this.syncInstallmentTotals();
+    }
+
+    toggleCustomInstallmentAmounts() {
+        const customEnabled = document.getElementById('installment-custom-enabled');
+        const customAmounts = document.getElementById('installment-custom-amounts');
+        const toggleButton = document.getElementById('installment-custom-toggle-btn');
+        if (!customEnabled || !customAmounts) return;
+
+        this.updateInstallmentCalculatedFieldState();
+        customAmounts.style.display = customEnabled.checked ? 'grid' : 'none';
+        if (toggleButton) {
+            toggleButton.classList.toggle('active', customEnabled.checked);
+            toggleButton.setAttribute('aria-pressed', customEnabled.checked ? 'true' : 'false');
+        }
+        this.updateInstallmentDerivedFields();
+        this.renderInstallmentAmountFields();
+    }
+
+    updateInstallmentCalculatedFieldState() {
+        const customEnabled = document.getElementById('installment-custom-enabled');
+        const amountInput = document.getElementById('installment-amount');
+        if (!customEnabled || !amountInput) return;
+
+        amountInput.readOnly = customEnabled.checked;
+        amountInput.classList.toggle('calculated-field', customEnabled.checked);
+        amountInput.title = customEnabled.checked ? 'Calculado pela média das parcelas diferentes' : '';
+    }
+
+    updateInstallmentDerivedFields() {
+        const totalInput = document.getElementById('installment-total');
+        const amountInput = document.getElementById('installment-amount');
+        const countInput = document.getElementById('installment-count');
+        const customAmounts = this.getCustomInstallmentAmounts();
+        if (!Array.isArray(customAmounts) || !totalInput || !amountInput || !countInput) return;
+
+        const total = customAmounts.reduce((sum, amount) => sum + Number(amount || 0), 0);
+        const count = customAmounts.length || Number(countInput.value) || 0;
+        totalInput.value = total > 0 ? total.toFixed(2) : '';
+        amountInput.value = count > 0 && total > 0 ? (Math.round((total / count) * 100) / 100).toFixed(2) : '';
+    }
+
+    renderInstallmentAmountFields(amounts = null) {
+        const customEnabled = document.getElementById('installment-custom-enabled');
+        const customAmounts = document.getElementById('installment-custom-amounts');
+        if (!customEnabled?.checked || !customAmounts) return;
+
+        const count = Math.max(0, parseInt(document.getElementById('installment-count')?.value || '0', 10));
+        const defaultAmount = Number(document.getElementById('installment-amount')?.value || 0);
+        const existingInputs = [...customAmounts.querySelectorAll('[data-installment-amount]')].map(input => Number(input.value));
+        const source = Array.isArray(amounts) ? amounts : existingInputs;
+        const startDateValue = document.getElementById('installment-start')?.value;
+        const startDate = startDateValue ? new Date(startDateValue + 'T00:00:00') : new Date();
+        const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+        customAmounts.innerHTML = '';
+        for (let i = 0; i < count; i++) {
+            const month = new Date(startDate);
+            month.setMonth(month.getMonth() + i);
+            const value = Number.isFinite(source[i]) ? source[i] : defaultAmount;
+            const row = document.createElement('label');
+            row.className = 'installment-custom-row';
+            row.innerHTML = `
+                <span>${i + 1}ª - ${monthNames[month.getMonth()]}/${month.getFullYear()}</span>
+                <input type="number" step="0.01" min="0" data-installment-amount="${i}" value="${Number(value || 0).toFixed(2)}">
+            `;
+            row.querySelector('input').addEventListener('input', () => this.updateInstallmentDerivedFields());
+            customAmounts.appendChild(row);
+        }
+        this.updateInstallmentDerivedFields();
+    }
+
+    getCustomInstallmentAmounts() {
+        const customEnabled = document.getElementById('installment-custom-enabled');
+        if (!customEnabled?.checked) return null;
+        return [...document.querySelectorAll('#installment-custom-amounts [data-installment-amount]')]
+            .map(input => Number(input.value || 0));
+    }
+
+    getInstallmentMonthLabel(inst, index) {
+        const startDate = new Date((inst.startDate || inst.start_date || '').split('T')[0] + 'T00:00:00');
+        const month = new Date(startDate);
+        month.setMonth(month.getMonth() + index);
+        const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+        return monthNames[month.getMonth()] + '/' + month.getFullYear();
+    }
+
+    getFocusedInstallmentIndex(inst, totalInstallments) {
+        if (!totalInstallments || totalInstallments <= 0) return 0;
+
+        const paid = Number(inst.currentInstallment ?? inst.current_installment ?? 0);
+        return Math.max(0, Math.min(paid > 0 ? paid - 1 : 0, totalInstallments - 1));
+    }
+
+    changeInstallmentPreview(id, direction) {
+        const inst = this.installments.find(item => item.id == id);
+        if (!inst) return;
+
+        const total = Number(inst.totalInstallments || inst.total_installments || 0);
+        const fallbackIndex = this.getFocusedInstallmentIndex(inst, total);
+        const currentIndex = this.installmentPreviewIndexes[id] ?? fallbackIndex;
+        this.installmentPreviewIndexes[id] = Math.max(0, Math.min(currentIndex + direction, total - 1));
+        this.loadInstallments();
+    }
+
     loadInstallments() {
         const list = document.getElementById('installments-list');
         list.innerHTML = '';
@@ -1409,15 +1584,23 @@ class FinanceApp {
             const paidInstallments = Math.max(0, Math.min(currentInstallment, totalInstallments));
             const remaining = Math.max(totalInstallments - paidInstallments, 0);
             const progress = totalInstallments > 0 ? (paidInstallments / totalInstallments) * 100 : 0;
-            const remainingAmount = remaining * installmentAmount;
+            const currentAmount = this.getInstallmentAmountAt(inst, paidInstallments);
+            const remainingAmount = this.sumInstallmentAmounts(inst, paidInstallments, totalInstallments);
+            const paidAmount = this.sumInstallmentAmounts(inst, 0, paidInstallments);
             const isCompleted = paidInstallments >= totalInstallments;
+            const variableAmounts = this.parseInstallmentAmounts(inst);
+            const hasVariableAmounts = variableAmounts.length > 0;
+            const previewFallback = this.getFocusedInstallmentIndex(inst, totalInstallments);
+            const previewIndex = Math.max(0, Math.min(this.installmentPreviewIndexes[inst.id] ?? previewFallback, totalInstallments - 1));
+            const previewAmount = this.getInstallmentAmountAt(inst, previewIndex);
+            const previewMonthLabel = this.getInstallmentMonthLabel(inst, previewIndex);
+            const previewIsPaid = previewIndex < paidInstallments;
+            const previewStatusLabel = previewIsPaid ? 'Parcela paga' : (previewIndex === paidInstallments && !isCompleted ? 'Valor a pagar' : 'Parcela futura');
+            this.installmentPreviewIndexes[inst.id] = previewIndex;
 
             // Mês de referência da próxima parcela
             const startDate = new Date((inst.startDate || inst.start_date || '').split('T')[0] + 'T00:00:00');
-            const nextMonth = new Date(startDate);
-            nextMonth.setMonth(nextMonth.getMonth() + paidInstallments);
             const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-            const nextMonthLabel = monthNames[nextMonth.getMonth()] + '/' + nextMonth.getFullYear();
             const currentMonthLabel = monthNames[startDate.getMonth()] + '/' + startDate.getFullYear();
 
             const item = document.createElement('div');
@@ -1428,10 +1611,10 @@ class FinanceApp {
                     <div style="flex: 1;">
                         <h3>${esc(inst.description)}</h3>
                         <p><strong>Categoria:</strong> ${esc(inst.category)}</p>
-                        <p><strong>Valor da Parcela:</strong> R$ ${installmentAmount.toFixed(2)}</p>
                         <p><strong>Parcelas Pagas:</strong> ${paidInstallments} de ${totalInstallments}</p>
                         <p><strong>Início:</strong> ${currentMonthLabel}</p>
-                        <p><strong>Próxima:</strong> ${nextMonthLabel}</p>
+                        <p><strong>Mês em foco:</strong> ${previewMonthLabel}</p>
+                        <p><strong>Valor Pago:</strong> R$ ${paidAmount.toFixed(2)}</p>
                         <p><strong>Parcelas Restantes:</strong> ${remaining}</p>
                         <p><strong>Valor Restante:</strong> R$ ${remainingAmount.toFixed(2)}</p>
                     </div>
@@ -1443,15 +1626,32 @@ class FinanceApp {
                             <button class="btn-small" onclick="editInstallment(${inst.id})" title="Editar"><i data-lucide="pencil" class="lucide-icon"></i></button>
                             <button class="btn-small btn-danger" onclick="deleteInstallment(${inst.id})" title="Excluir"><i data-lucide="trash-2" class="lucide-icon"></i></button>
                         </div>
+                        <div class="installment-focus">
+                            <div class="installment-focus-label">${previewStatusLabel}</div>
+                            <div class="installment-focus-row">
+                                <button type="button" class="installment-preview-btn" onclick="app.changeInstallmentPreview(${inst.id}, -1)" ${previewIndex <= 0 ? 'disabled' : ''} title="Parcela anterior">
+                                    <i data-lucide="chevron-left" class="lucide-icon"></i>
+                                </button>
+                                <div class="installment-focus-value ${previewIsPaid ? 'paid' : ''}">R$ ${previewAmount.toFixed(2)}</div>
+                                <button type="button" class="installment-preview-btn" onclick="app.changeInstallmentPreview(${inst.id}, 1)" ${previewIndex >= totalInstallments - 1 ? 'disabled' : ''} title="Proxima parcela">
+                                    <i data-lucide="chevron-right" class="lucide-icon"></i>
+                                </button>
+                            </div>
+                            <div class="installment-focus-meta">Parcela ${previewIndex + 1} de ${totalInstallments} - ${previewMonthLabel}</div>
+                        </div>
                     </div>
                 </div>
                 <div style="margin-top: 10px;">
                     <div style="background: #e0e0e0; height: 8px; border-radius: 4px; overflow: hidden;">
-                        <div style="background: ${isCompleted ? '#2ecc71' : '#3498db'}; height: 100%; width: ${progress}%;"></div>
+                        <div style="background: ${paidInstallments > 0 ? '#2ecc71' : '#3498db'}; height: 100%; width: ${progress}%;"></div>
                     </div>
                     <p style="font-size: 12px; color: #666; margin-top: 4px;">${progress.toFixed(0)}% pago</p>
                 </div>
-                ${!isCompleted ? `<button class="btn" style="margin-top: 10px; padding: 5px 15px; font-size: 12px;" onclick="markInstallmentPaid(${inst.id})">Marcar Parcela como Paga</button>` : ''}
+                ${previewIsPaid
+                    ? '<span class="installment-paid-label"><i data-lucide="check-circle-2" class="lucide-icon"></i> Parcela paga</span>'
+                    : !isCompleted
+                        ? `<button class="btn" style="margin-top: 10px; padding: 5px 15px; font-size: 12px;" onclick="markInstallmentPaid(${inst.id})"><i data-lucide="check" class="lucide-icon"></i> Marcar Parcela como Paga</button>`
+                        : ''}
             `;
             list.appendChild(item);
         });
@@ -1523,8 +1723,8 @@ class FinanceApp {
 
     async addInstallment() {
         const description = document.getElementById('installment-description').value;
-        const totalAmount = parseFloat(document.getElementById('installment-total').value);
-        const installmentAmount = parseFloat(document.getElementById('installment-amount').value);
+        let totalAmount = parseFloat(document.getElementById('installment-total').value);
+        let installmentAmount = parseFloat(document.getElementById('installment-amount').value);
         const totalInstallments = parseInt(document.getElementById('installment-count').value);
         const category = document.getElementById('installment-category').value;
         const startDate = document.getElementById('installment-start').value;
@@ -1532,8 +1732,24 @@ class FinanceApp {
         const currentInstallment = editId
             ? parseInt(document.getElementById('installment-current').value)
             : 0;
+        const installmentAmounts = this.getCustomInstallmentAmounts();
+        if (Array.isArray(installmentAmounts) && installmentAmounts.length > 0) {
+            totalAmount = installmentAmounts.reduce((sum, amount) => sum + Number(amount || 0), 0);
+            installmentAmount = totalInstallments > 0
+                ? Math.round((totalAmount / totalInstallments) * 100) / 100
+                : 0;
+        } else if (Number.isFinite(installmentAmount) && Number.isFinite(totalInstallments) && totalInstallments > 0 && !Number.isFinite(totalAmount)) {
+            totalAmount = Math.round((installmentAmount * totalInstallments) * 100) / 100;
+        } else if (Number.isFinite(totalAmount) && Number.isFinite(totalInstallments) && totalInstallments > 0 && !Number.isFinite(installmentAmount)) {
+            installmentAmount = Math.round((totalAmount / totalInstallments) * 100) / 100;
+        }
 
-        const installment = { description, totalAmount, installmentAmount, totalInstallments, currentInstallment, category, startDate };
+        if (!description || !Number.isFinite(totalAmount) || !Number.isFinite(installmentAmount) || !Number.isFinite(totalInstallments) || totalInstallments <= 0) {
+            alert('Informe a descrição, a quantidade de parcelas e os valores do parcelamento.');
+            return;
+        }
+
+        const installment = { description, totalAmount, installmentAmount, installmentAmounts, totalInstallments, currentInstallment, category, startDate };
 
         try {
             let response;
@@ -1716,6 +1932,19 @@ class FinanceApp {
     closeInstallmentModal() {
         document.getElementById('installment-modal').style.display = 'none';
         document.getElementById('installment-form').reset();
+        const customEnabled = document.getElementById('installment-custom-enabled');
+        const customAmounts = document.getElementById('installment-custom-amounts');
+        const toggleButton = document.getElementById('installment-custom-toggle-btn');
+        if (customEnabled) customEnabled.checked = false;
+        this.updateInstallmentCalculatedFieldState();
+        if (toggleButton) {
+            toggleButton.classList.remove('active');
+            toggleButton.setAttribute('aria-pressed', 'false');
+        }
+        if (customAmounts) {
+            customAmounts.innerHTML = '';
+            customAmounts.style.display = 'none';
+        }
         delete document.getElementById('installment-modal').dataset.editId;
         document.getElementById('installment-modal').querySelector('h2').textContent = 'Novo Parcelamento';
     }
@@ -1938,9 +2167,11 @@ async function markInstallmentPaid(id) {
         if (data.success) {
             const inst = app.installments.find(i => i.id == id);
             if (inst) {
+                const previousCurrentInstallment = inst.currentInstallment ?? inst.current_installment ?? 0;
                 const currentInstallment = data.data?.currentInstallment ?? ((inst.currentInstallment ?? inst.current_installment ?? 0) + 1);
                 inst.currentInstallment = currentInstallment;
                 inst.current_installment = currentInstallment;
+                app.installmentPreviewIndexes[id] = Math.max(0, previousCurrentInstallment);
             }
             app.loadInstallments();
         } else {
@@ -2012,6 +2243,18 @@ async function editInstallment(id) {
     document.getElementById('installment-current').value = inst.currentInstallment || inst.current_installment || 0;
     document.getElementById('installment-category').value = inst.category || 'Compras';
     document.getElementById('installment-start').value = (inst.startDate || inst.start_date || '').split('T')[0];
+    const amounts = app.parseInstallmentAmounts(inst);
+    const customEnabled = document.getElementById('installment-custom-enabled');
+    const customAmounts = document.getElementById('installment-custom-amounts');
+    const toggleButton = document.getElementById('installment-custom-toggle-btn');
+    if (customEnabled) customEnabled.checked = amounts.length > 0;
+    app.updateInstallmentCalculatedFieldState();
+    if (toggleButton) {
+        toggleButton.classList.toggle('active', amounts.length > 0);
+        toggleButton.setAttribute('aria-pressed', amounts.length > 0 ? 'true' : 'false');
+    }
+    if (customAmounts) customAmounts.style.display = amounts.length > 0 ? 'grid' : 'none';
+    if (amounts.length > 0) app.renderInstallmentAmountFields(amounts);
     document.getElementById('installment-modal').dataset.editId = id;
     document.getElementById('installment-modal').querySelector('h2').textContent = 'Editar Parcelamento';
     openInstallmentModal();

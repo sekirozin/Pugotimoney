@@ -123,7 +123,7 @@ export class InstallmentController {
                 success: true,
                 data: {
                     totalUpcoming: upcoming.length,
-                    totalAmount: upcoming.reduce((sum, i) => sum + i.installmentAmount, 0),
+                    totalAmount: upcoming.reduce((sum, i) => sum + getInstallmentAmountAt(i, i.currentInstallment), 0),
                     installments: upcoming
                 }
             });
@@ -230,3 +230,12 @@ export class InstallmentController {
 }
 
 export const installmentController = new InstallmentController();
+
+function getInstallmentAmountAt(installment: any, index: number): number {
+    const amounts = installment.installmentAmounts ?? installment.installment_amounts;
+    if (Array.isArray(amounts) && Number.isFinite(Number(amounts[index]))) {
+        return Number(amounts[index]);
+    }
+
+    return Number(installment.installmentAmount ?? installment.installment_amount ?? 0);
+}
