@@ -5,34 +5,36 @@
 }
 
 :root {
-    --bg: #f5f3f7;
+    --bg: #f5f6f8;
     --surface: #ffffff;
-    --surface-soft: #eeeaf2;
-    --text: #282b30;
-    --muted: #604685;
-    --border: #ded8e6;
-    --input-border: #d1bf84;
-    --hover: #e8e2ed;
-    --primary: #604685;
-    --primary-hover: #4e396b;
-    --success: #d1bf84;
-    --accent-soft: #d1bf84;
-    --shadow: rgba(40,43,48,0.14);
+    --surface-soft: #e8eaed;
+    --text: #1a1c1e;
+    --muted: #5f6368;
+    --border: #dadce0;
+    --input-border: #dadce0;
+    --hover: #eef3fb;
+    --primary: #1c31a5;
+    --primary-hover: #101f78;
+    --brand-strong: #1c31a5;
+    --success: #16a34a;
+    --accent-soft: #dbe4ff;
+    --shadow: rgba(0,0,0,0.14);
 }
 
 body.dark-mode {
-    --bg: #282b30;
-    --surface: #343039;
-    --surface-soft: #4e396b;
-    --text: #f7f4ed;
-    --muted: #d1bf84;
-    --border: #604685;
-    --input-border: #694d91;
-    --hover: #4e396b;
-    --primary: #694d91;
-    --primary-hover: #604685;
-    --success: #d1bf84;
-    --accent-soft: #d1bf84;
+    --bg: #000000;
+    --surface: #050505;
+    --surface-soft: #0d0d0d;
+    --text: #f7f9ff;
+    --muted: #aab2bf;
+    --border: #1f1f1f;
+    --input-border: #1f1f1f;
+    --hover: #111111;
+    --primary: #1c31a5;
+    --primary-hover: #101f78;
+    --brand-strong: #dbe4ff;
+    --success: #22c55e;
+    --accent-soft: #dbe4ff;
     --shadow: rgba(0,0,0,0.4);
 }
 
@@ -43,6 +45,40 @@ body {
     background-color: var(--bg);
 }
 
+#auth-page {
+    background:
+        radial-gradient(circle at 50% 24%, rgb(28 49 165 / 22%), transparent 34%),
+        var(--bg) !important;
+}
+
+#auth-page > div {
+    background: var(--surface) !important;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 12px !important;
+    box-shadow: 0 28px 80px var(--shadow) !important;
+}
+
+#auth-page h2 {
+    color: var(--brand-strong) !important;
+}
+
+#auth-page p,
+#auth-page label {
+    color: var(--muted) !important;
+}
+
+#auth-page input {
+    background: var(--surface-soft) !important;
+    color: var(--text);
+    border-color: var(--input-border) !important;
+}
+
+#auth-page input:focus {
+    outline: 3px solid rgb(28 49 165 / 28%);
+    border-color: var(--primary) !important;
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -50,10 +86,19 @@ body {
 }
 
 header {
-    background: linear-gradient(135deg, #282b30 0%, #604685 100%);
-    color: white;
-    padding: 1rem 0;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    position: sticky;
+    top: 0;
+    z-index: 900;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 0;
+    box-shadow: 0 2px 10px var(--shadow);
+}
+
+header .container {
+    max-width: none;
+    padding: 14px 16px 14px 17px;
 }
 
 header h1 {
@@ -79,7 +124,7 @@ header h1 {
 .auth-brand-title {
     width: 100%;
     margin-bottom: 8px;
-    color: #333;
+    color: var(--text);
 }
 
 .auth-brand-icon {
@@ -90,8 +135,47 @@ header h1 {
 
 .header-top {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 12px;
+}
+
+.mobile-menu-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-soft);
+    color: var(--text);
+    cursor: pointer;
+    flex: 0 0 auto;
+    padding: 0;
+}
+
+.header-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 1.1rem;
+    font-weight: 800;
+    padding: 0;
+}
+
+.header-brand-icon {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-soft);
+    padding: 4px;
+    display: block;
 }
 
 .profile-area {
@@ -99,6 +183,7 @@ header h1 {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    margin-left: auto;
 }
 
 .profile-trigger,
@@ -187,7 +272,7 @@ header h1 {
 
 .profile-role {
     font-size: 12px;
-    color: #c4b5fd;
+    color: var(--brand-strong, var(--accent-soft));
     margin-top: 3px;
     background: transparent;
 }
@@ -210,25 +295,119 @@ header h1 {
     color: #fecaca;
 }
 
-nav {
+.app-layout {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    min-height: calc(100vh - 67px);
+    transition: grid-template-columns 0.22s ease;
+}
+
+body.sidebar-expanded .app-layout {
+    grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.sidebar-nav {
+    position: sticky;
+    top: 67px;
+    align-self: start;
+    height: calc(100vh - 67px);
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 16px 12px;
+    overflow-y: auto;
+    width: 72px;
+    transition: width 0.22s ease;
+}
+
+body.sidebar-expanded .sidebar-nav {
+    width: 260px;
+}
+
+.sidebar-brand {
     display: flex;
-    justify-content: center;
-    gap: 2rem;
-    margin-top: 1rem;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    min-height: 38px;
+    padding: 0 10px 12px;
+    color: var(--brand-strong);
+    font-size: 1.05rem;
+    font-weight: 800;
 }
 
-nav button {
-    background: rgba(255,255,255,0.2);
-    border: none;
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
+body.sidebar-expanded .sidebar-brand {
+    justify-content: flex-start;
+    padding: 0 10px 12px;
+}
+
+.sidebar-brand span,
+.nav-btn span {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity 0.18s ease, width 0.18s ease;
+}
+
+body.sidebar-expanded .sidebar-brand span,
+body.sidebar-expanded .nav-btn span {
+    width: auto;
+    opacity: 1;
+}
+
+.sidebar-nav nav {
+    display: grid;
+    gap: 6px;
+}
+
+.nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 42px;
+    border: 0;
+    border-left: 3px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
     cursor: pointer;
-    transition: background 0.3s;
+    font: inherit;
+    font-weight: 700;
+    padding: 9px 12px;
+    text-align: left;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
-nav button:hover, nav button.active {
-    background: rgba(255,255,255,0.3);
+.nav-btn:hover,
+.nav-btn.active {
+    border-left-color: var(--primary);
+    background: var(--surface-soft);
+    color: var(--text);
+}
+
+.nav-btn .lucide-icon {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+}
+
+.app-main {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+}
+
+.mobile-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 950;
+    display: none;
+    background: rgb(0 0 0 / 58%);
+}
+
+.mobile-menu-backdrop.open {
+    display: block;
 }
 
 .dashboard {
@@ -251,7 +430,7 @@ nav button:hover, nav button.active {
 }
 
 .card h3 {
-    color: #604685;
+    color: var(--primary);
     margin-bottom: 15px;
     font-size: 1.2rem;
 }
@@ -259,7 +438,7 @@ nav button:hover, nav button.active {
 .balance {
     font-size: 2rem;
     font-weight: bold;
-    color: #d1bf84;
+    color: var(--accent-soft);
 }
 
 .expense {
@@ -267,7 +446,7 @@ nav button:hover, nav button.active {
 }
 
 .income {
-    color: #d1bf84;
+    color: var(--accent-soft);
 }
 
 .form-group {
@@ -290,7 +469,14 @@ nav button:hover, nav button.active {
 
 .form-group input:focus, .form-group select:focus {
     outline: none;
-    border-color: #604685;
+    border-color: var(--primary);
+}
+
+.form-hint {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.8rem;
 }
 
 .form-group input.calculated-field {
@@ -321,8 +507,23 @@ nav button:hover, nav button.active {
     cursor: pointer;
 }
 
+.checkbox-label.installment-paid-previous {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 16px;
+    color: var(--text);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.checkbox-label.installment-paid-previous input {
+    width: auto;
+    margin: 0;
+}
+
 #recurrence-fields {
-    border-left: 3px solid #604685;
+    border-left: 3px solid var(--primary);
     padding-left: 12px;
     margin-top: 10px;
 }
@@ -333,7 +534,7 @@ nav button:hover, nav button.active {
 }
 
 .btn {
-    background: #604685;
+    background: var(--primary);
     color: white;
     border: none;
     padding: 10px 20px;
@@ -344,11 +545,11 @@ nav button:hover, nav button.active {
 }
 
 .btn:hover {
-    background: #4e396b;
+    background: var(--primary-hover);
 }
 
 .btn-small {
-    background: #604685;
+    background: var(--primary);
     color: white;
     border: none;
     padding: 5px 10px;
@@ -359,16 +560,16 @@ nav button:hover, nav button.active {
 }
 
 .btn-small:hover {
-    background: #4e396b;
+    background: var(--primary-hover);
 }
 
 .btn-small.checked {
-    background: #d1bf84;
-    color: #282b30;
+    background: var(--accent-soft);
+    color: var(--bg);
 }
 
 .btn-small.checked:hover {
-    background: #b9a665;
+    background: var(--primary-hover);
 }
 
 .installment-paid-label {
@@ -417,7 +618,7 @@ nav button:hover, nav button.active {
 }
 
 .chart-container h3 {
-    color: #604685;
+    color: var(--primary);
     margin-bottom: 15px;
     font-size: 1.2rem;
 }
@@ -489,7 +690,7 @@ nav button:hover, nav button.active {
 
 .transaction-category {
     font-size: 12px;
-    color: #604685;
+    color: var(--primary);
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-top: 4px;
@@ -569,7 +770,7 @@ nav button:hover, nav button.active {
 }
 
 .card-item {
-    background: linear-gradient(135deg, #604685 0%, #282b30 100%);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--bg) 100%);
     color: white;
     border-radius: 10px;
     padding: 20px;
@@ -617,9 +818,329 @@ nav button:hover, nav button.active {
 
 .installment-bar-fill {
     height: 100%;
-    background: #604685;
+    background: var(--primary);
     border-radius: 3px;
     transition: width 0.3s;
+}
+
+.installments-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.installments-toolbar h3 {
+    margin: 0;
+}
+
+.installments-title-block {
+    display: grid;
+    gap: 8px;
+}
+
+.installment-sort-control {
+    display: grid;
+    gap: 4px;
+    max-width: 210px;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.installment-sort-control select {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    padding: 8px 10px;
+}
+
+.installments-controls {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.installments-controls label {
+    display: grid;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.installments-controls select {
+    min-width: 118px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    padding: 8px 10px;
+}
+
+.installment-view-toggle {
+    display: inline-flex;
+    align-self: end;
+    gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-soft);
+    padding: 4px;
+}
+
+.installment-view-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 30px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.installment-view-btn.active,
+.installment-view-btn:hover {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.installment-month-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 14px 0 18px;
+}
+
+.installment-month-summary > div {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    padding: 14px;
+}
+
+.installment-month-summary .summary-label,
+.installment-month-summary small {
+    display: block;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.installment-month-summary strong {
+    display: block;
+    margin: 6px 0 2px;
+    color: var(--brand-strong);
+    font-size: 1.35rem;
+}
+
+.installment-month-summary .summary-paid {
+    color: var(--success);
+}
+
+.installment-month-summary .summary-pending {
+    color: #f97316;
+}
+
+.installment-summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    padding: 14px;
+    margin-bottom: 10px;
+}
+
+.installment-summary-row.is-hidden-from-total,
+.installment-card.is-hidden-from-total {
+    opacity: 0.48;
+}
+
+.installment-summary-row.is-hidden-from-total {
+    border-style: dashed;
+}
+
+.installment-visibility-btn.muted {
+    color: var(--muted);
+}
+
+.installment-summary-row h4 {
+    margin: 0 0 4px;
+    color: var(--text);
+}
+
+.installment-summary-row small {
+    color: var(--muted);
+}
+
+.installment-summary-value {
+    display: grid;
+    justify-items: end;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.installment-summary-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.installment-summary-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.installment-summary-value strong {
+    color: var(--brand-strong);
+    font-size: 1.1rem;
+}
+
+.installment-summary-value span {
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.installment-summary-value .paid {
+    background: rgb(34 197 94 / 16%);
+    color: var(--success);
+}
+
+.installment-summary-value .pending {
+    background: rgb(249 115 22 / 16%);
+    color: #f97316;
+}
+
+.installment-card {
+    margin-bottom: 15px;
+}
+
+.installment-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.installment-card-header h3 {
+    margin: 0 0 4px;
+    color: var(--brand-strong);
+}
+
+.installment-card-category {
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+.installment-card-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, auto);
+    align-items: flex-start;
+    gap: 18px;
+}
+
+.installment-card-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.installment-card-actions {
+    display: grid;
+    justify-items: end;
+    text-align: right;
+}
+
+.installment-info-grid {
+    display: block;
+}
+
+.installment-info-grid span {
+    display: block;
+    color: var(--text);
+    margin: 5px 0;
+}
+
+.installment-info-grid strong {
+    color: var(--text);
+    font-size: inherit;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-right: 4px;
+}
+
+.installment-status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.installment-status-badge.completed {
+    background: #2ecc71;
+}
+
+.installment-status-badge.active {
+    background: #f39c12;
+}
+
+.installment-action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.installment-card-top-actions {
+    display: grid;
+    justify-items: end;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+
+.installment-progress-block {
+    margin-top: 10px;
+}
+
+.installment-progress-track {
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--surface-soft);
+}
+
+.installment-progress-fill {
+    height: 100%;
+    background: #3498db;
+}
+
+.installment-progress-fill.has-paid {
+    background: #2ecc71;
+}
+
+.installment-progress-fill.pending-month {
+    background: #3498db;
+}
+
+.installment-progress-block p {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.installment-pay-button {
+    margin-top: 10px;
+    padding: 5px 15px;
+    font-size: 12px;
 }
 
 .installment-custom-toggle {
@@ -742,7 +1263,11 @@ nav button:hover, nav button.active {
 
 .installment-focus {
     min-width: 280px;
-    margin-top: 68px;
+    margin-top: 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    padding: 14px 16px;
     text-align: center;
 }
 
@@ -761,12 +1286,12 @@ nav button:hover, nav button.active {
 }
 
 .installment-focus-value {
-    min-width: 160px;
-    padding: 12px 18px;
-    border-radius: 8px;
-    background: var(--surface);
+    min-width: 0;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
     color: var(--text);
-    font-size: 30px;
+    font-size: 28px;
     font-weight: 800;
     line-height: 1;
 }
@@ -840,13 +1365,272 @@ nav button:hover, nav button.active {
 }
 
 @media (max-width: 768px) {
+    header {
+        padding: 0.75rem 0;
+    }
+
+    .container {
+        padding: 14px;
+    }
+
+    header .container {
+        padding: 10px 12px;
+    }
+
+    .header-top {
+        justify-content: flex-start;
+    }
+
+    .header-brand {
+        min-width: 0;
+        font-size: 1rem;
+    }
+
+    .header-brand span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .profile-area {
+        margin-left: auto;
+    }
+
+    .app-layout {
+        display: block;
+        min-height: auto;
+    }
+
+    body.sidebar-expanded .app-layout {
+        display: block;
+    }
+
+    .sidebar-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 1000;
+        width: min(82vw, 300px);
+        height: 100vh;
+        padding-top: 18px;
+        transform: translateX(-105%);
+        transition: transform 0.22s ease;
+        box-shadow: 22px 0 60px rgb(0 0 0 / 45%);
+    }
+
+    .sidebar-brand,
+    body.sidebar-expanded .sidebar-brand {
+        justify-content: flex-start;
+        padding: 0 10px 12px;
+    }
+
+    body.sidebar-expanded .sidebar-nav {
+        width: min(82vw, 300px);
+    }
+
+    .sidebar-brand span,
+    .nav-btn span,
+    body.sidebar-expanded .sidebar-brand span,
+    body.sidebar-expanded .nav-btn span {
+        width: auto;
+        opacity: 1;
+    }
+
+    .sidebar-nav.open {
+        transform: translateX(0);
+    }
+
     .dashboard, .charts-container {
         grid-template-columns: 1fr;
     }
-    
-    nav {
-        flex-direction: column;
-        gap: 1rem;
+
+    .installments-toolbar,
+    .installment-summary-row {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .installments-toolbar {
+        gap: 10px;
+    }
+
+    .installments-title-block {
+        gap: 6px;
+    }
+
+    .installment-sort-control {
+        max-width: none;
+        width: 100%;
+        font-size: 0.72rem;
+    }
+
+    .installment-sort-control select {
+        width: 100%;
+        padding: 7px 8px;
+        font-size: 0.82rem;
+    }
+
+    .installments-controls {
+        display: grid;
+        grid-template-columns: 1fr 0.75fr auto;
+        gap: 8px;
+        align-items: end;
+    }
+
+    .installments-controls label {
+        font-size: 0.72rem;
+    }
+
+    .installments-controls select {
+        min-width: 0;
+        width: 100%;
+        padding: 7px 8px;
+        font-size: 0.82rem;
+    }
+
+    .installment-view-toggle {
+        width: max-content;
+        justify-self: end;
+        padding: 3px;
+    }
+
+    .installment-view-btn {
+        width: 32px;
+        height: 28px;
+    }
+
+    .installment-month-summary {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin: 10px 0 14px;
+    }
+
+    .installment-month-summary > div {
+        padding: 10px 12px;
+    }
+
+    .installment-month-summary strong {
+        font-size: 1.1rem;
+    }
+
+    .installment-summary-value {
+        justify-items: start;
+    }
+
+    .installment-summary-actions {
+        display: grid;
+        gap: 8px;
+        justify-items: start;
+    }
+
+    .installment-summary-buttons {
+        justify-content: flex-start;
+    }
+
+    .installment-card {
+        padding: 12px;
+    }
+
+    .installment-card-header {
+        display: grid;
+        grid-template-columns: 1fr;
+        align-items: start;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .installment-card-header h3 {
+        font-size: 1.04rem;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
+
+    .installment-card-category {
+        font-size: 0.78rem;
+    }
+
+    .installment-card-main {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .installment-info-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .installment-info-grid span {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface-soft);
+        padding: 8px;
+        font-size: 0.86rem;
+    }
+
+    .installment-info-grid strong {
+        font-size: 0.66rem;
+    }
+
+    .installment-card-actions {
+        justify-items: stretch;
+        text-align: left;
+    }
+
+    .installment-card-top-actions {
+        justify-items: start;
+        gap: 8px;
+    }
+
+    .installment-status-badge {
+        justify-self: start;
+    }
+
+    .installment-action-buttons {
+        justify-content: flex-start;
+    }
+
+    .installment-focus {
+        width: 100%;
+        min-width: 0;
+        margin-top: 0;
+        text-align: center;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface-soft);
+        padding: 10px;
+    }
+
+    .installment-focus-label {
+        font-size: 0.78rem;
+    }
+
+    .installment-focus-row {
+        gap: 8px;
+        justify-content: center;
+    }
+
+    .installment-focus-value {
+        min-width: 0;
+        flex: 1;
+        text-align: center;
+        padding: 0;
+        font-size: 1.45rem;
+        white-space: nowrap;
+    }
+
+    .installment-preview-btn {
+        width: 30px;
+        height: 30px;
+        flex: 0 0 30px;
+    }
+
+    .installment-focus-meta {
+        font-size: 0.74rem;
+    }
+
+    .installment-pay-button {
+        width: 100%;
     }
 
     .filter-search {
@@ -854,7 +1638,7 @@ nav button:hover, nav button.active {
     }
     
     header h1 {
-        font-size: 2rem;
+        font-size: 1.45rem;
     }
 }
 
@@ -886,7 +1670,7 @@ nav button:hover, nav button.active {
 }
 
 .badge {
-    background: #604685;
+    background: var(--primary);
     color: white;
     padding: 2px 10px;
     border-radius: 12px;
@@ -913,7 +1697,7 @@ nav button:hover, nav button.active {
     width: 72px;
     height: 72px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #604685 0%, #282b30 100%);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--bg) 100%);
     color: white;
     display: flex;
     align-items: center;
@@ -939,12 +1723,12 @@ nav button:hover, nav button.active {
     font-size: 13px;
     font-weight: 600;
     text-transform: capitalize;
-    background: #604685;
+    background: var(--primary);
     color: white;
 }
 
 .profile-badge[data-role="admin"] {
-    background: linear-gradient(135deg, #d1bf84 0%, #d1bf84 100%);
+    background: linear-gradient(135deg, var(--accent-soft) 0%, var(--accent-soft) 100%);
 }
 
 .profile-member-since {
@@ -973,7 +1757,7 @@ nav button:hover, nav button.active {
 .profile-section-title .lucide-icon {
     width: 18px;
     height: 18px;
-    color: #604685;
+    color: var(--primary);
 }
 
 .profile-input {
@@ -989,7 +1773,7 @@ nav button:hover, nav button.active {
 
 .profile-input:focus {
     outline: none;
-    border-color: #604685;
+    border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -1108,7 +1892,7 @@ body.dark-mode .profile-section-title {
 }
 
 body.dark-mode .profile-role {
-    color: #c4b5fd;
+    color: var(--brand-strong, var(--accent-soft));
 }
 
 body.dark-mode .transaction-item:hover,
@@ -1159,7 +1943,7 @@ body.dark-mode .budget-bar {
 }
 
 body.dark-mode #auth-page {
-    background: linear-gradient(135deg, #282b30 0%, #4e396b 100%) !important;
+    background: linear-gradient(135deg, var(--bg) 0%, var(--primary-hover) 100%) !important;
 }
 
 body.dark-mode #auth-page > div {

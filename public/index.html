@@ -3,27 +3,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pugotimoney</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260619-1">
-    <link rel="stylesheet" href="css/style.css?v=20260618-17">
+    <link rel="stylesheet" href="css/style.css?v=installment-arrows-pdf-20260624">
     <script src="js/lucide.min.js"></script>
     <script src="js/chart.umd.min.js"></script>
 </head>
 <body class="dark-mode">
-    <div id="auth-page" style="display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #0b4db8 0%, #1d7af2 100%);">
-        <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px;">
-            <h2 class="auth-brand-title"><img src="/pugotimoney-icon.svg" alt="" class="auth-brand-icon"> Pugotimoney</h2>
-            <p style="text-align: center; color: #666; margin-bottom: 24px;" id="auth-subtitle">Faça login para continuar</p>
+    <div id="auth-page" style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+        <div style="padding: 40px; width: 100%; max-width: 400px;">
+            <h2 class="auth-brand-title"><img src="/pugotimoney-icon.svg?v=pugotiread-colors-20260624" alt="" class="auth-brand-icon"> Pugotimoney</h2>
+            <p style="text-align: center; margin-bottom: 24px;" id="auth-subtitle">Faça login para continuar</p>
             
             <form id="login-form" style="display: none;">
                 <div class="form-group">
                     <label for="login-username">Usuário:</label>
-                    <input type="text" id="login-username" placeholder="Seu usuário" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    <input type="text" id="login-username" placeholder="Seu usuário" style="width: 100%; padding: 10px; border-radius: 6px; font-size: 14px;">
                 </div>
                 <div class="form-group">
                     <label for="login-password">Senha:</label>
-                    <input type="password" id="login-password" placeholder="Sua senha" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    <input type="password" id="login-password" placeholder="Sua senha" style="width: 100%; padding: 10px; border-radius: 6px; font-size: 14px;">
                 </div>
                 <button type="submit" class="btn" style="width: 100%; margin-top: 8px;">Entrar</button>
-                <p style="text-align: center; margin-top: 16px; font-size: 13px; color: #666;">
+                <p style="text-align: center; margin-top: 16px; font-size: 13px;">
                     Ainda não tem conta? <a href="#" onclick="showRegister()" style="color: var(--primary);">Registre-se</a>
                 </p>
             </form>
@@ -31,14 +31,14 @@
             <form id="register-form" style="display: none;">
                 <div class="form-group">
                     <label for="register-username">Usuário:</label>
-                    <input type="text" id="register-username" placeholder="Escolha um usuário" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    <input type="text" id="register-username" placeholder="Escolha um usuário" style="width: 100%; padding: 10px; border-radius: 6px; font-size: 14px;">
                 </div>
                 <div class="form-group">
                     <label for="register-password">Senha:</label>
-                    <input type="password" id="register-password" placeholder="Escolha uma senha" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    <input type="password" id="register-password" placeholder="Escolha uma senha" style="width: 100%; padding: 10px; border-radius: 6px; font-size: 14px;">
                 </div>
                 <button type="submit" class="btn" style="width: 100%; margin-top: 8px;">Criar Conta</button>
-                <p style="text-align: center; margin-top: 16px; font-size: 13px; color: #666;">
+                <p style="text-align: center; margin-top: 16px; font-size: 13px;">
                     Já tem conta? <a href="#" onclick="showLogin()" style="color: var(--primary);">Faça login</a>
                 </p>
             </form>
@@ -48,10 +48,17 @@
     </div>
 
     <div id="app-content" style="display: none;">
+    <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" onclick="closeMobileMenu()"></div>
     <header>
         <div class="container">
             <div class="header-top">
-                <h1 class="brand-title"><img src="/pugotimoney-icon.svg" alt="" class="brand-icon"> Pugotimoney</h1>
+                <button type="button" class="mobile-menu-button" id="mobile-menu-button" onclick="toggleMobileMenu()" aria-label="Abrir menu" aria-expanded="false">
+                    <i data-lucide="menu" class="lucide-icon"></i>
+                </button>
+                <button type="button" class="header-brand" onclick="window.app?.navigateTo('dashboard')" aria-label="Abrir Dashboard">
+                    <img src="/pugotimoney-icon.svg?v=pugotiread-colors-20260624" alt="" class="header-brand-icon">
+                    <span>Pugotimoney</span>
+                </button>
                 <div class="profile-area">
                     <button type="button" class="theme-toggle-button" id="theme-toggle-button" onclick="toggleTheme()" title="Alternar tema">
                         <i data-lucide="sun" class="lucide-icon" id="theme-toggle-icon"></i>
@@ -77,21 +84,28 @@
                     </div>
                 </div>
             </div>
-            <nav>
-                <button class="nav-btn active" data-page="dashboard">Dashboard</button>
-                <button class="nav-btn" data-page="transactions">Transações</button>
-                <button class="nav-btn" data-page="installments">Parcelamentos</button>
-                <button class="nav-btn" data-page="subscriptions">Assinaturas</button>
-                <button class="nav-btn" data-page="shopping-list">Lista de Compras</button>
-                <button class="nav-btn" data-page="credit-cards">Cartões</button>
-                <button class="nav-btn" data-page="budgets">Orçamentos</button>
-                <button class="nav-btn" data-page="incomes">Receitas</button>
-                <button class="nav-btn" data-page="reports">Relatórios</button>
-            </nav>
         </div>
     </header>
 
-    <main class="container">
+    <div class="app-layout">
+        <aside class="sidebar-nav" id="sidebar-nav" aria-label="Menu principal">
+            <div class="sidebar-brand">
+                <span>Pugotimoney</span>
+            </div>
+            <nav>
+                <button class="nav-btn active" data-page="dashboard"><i data-lucide="layout-dashboard" class="lucide-icon"></i><span>Dashboard</span></button>
+                <button class="nav-btn" data-page="transactions"><i data-lucide="arrow-right-left" class="lucide-icon"></i><span>Transações</span></button>
+                <button class="nav-btn" data-page="installments"><i data-lucide="calendar-clock" class="lucide-icon"></i><span>Parcelamentos</span></button>
+                <button class="nav-btn" data-page="subscriptions"><i data-lucide="repeat" class="lucide-icon"></i><span>Assinaturas</span></button>
+                <button class="nav-btn" data-page="shopping-list"><i data-lucide="shopping-cart" class="lucide-icon"></i><span>Lista de Compras</span></button>
+                <button class="nav-btn" data-page="credit-cards"><i data-lucide="credit-card" class="lucide-icon"></i><span>Cartões</span></button>
+                <button class="nav-btn" data-page="budgets"><i data-lucide="wallet" class="lucide-icon"></i><span>Orçamentos</span></button>
+                <button class="nav-btn" data-page="incomes"><i data-lucide="trending-up" class="lucide-icon"></i><span>Receitas</span></button>
+                <button class="nav-btn" data-page="reports"><i data-lucide="bar-chart-3" class="lucide-icon"></i><span>Relatórios</span></button>
+            </nav>
+        </aside>
+
+    <main class="container app-main">
         <div id="dashboard" class="page active">
             <h2>Dashboard</h2>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -259,7 +273,53 @@
             <button class="btn" onclick="openInstallmentModal()">Novo Parcelamento</button>
             
             <div class="card" style="margin-top: 20px;">
-                <h3>Parcelamentos Ativos</h3>
+                <div class="installments-toolbar">
+                    <div class="installments-title-block">
+                        <h3>Parcelamentos Ativos</h3>
+                        <label class="installment-sort-control">
+                            <span>Ordenar por:</span>
+                            <select id="installment-sort">
+                                <option value="completion">Mais completo</option>
+                                <option value="value-desc">Maior valor</option>
+                                <option value="value-asc">Menor valor</option>
+                                <option value="date-asc">Data mais próxima</option>
+                                <option value="date-desc">Data mais distante</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="installments-controls">
+                        <label>
+                            <span>Mês:</span>
+                            <select id="installment-view-month">
+                                <option value="0">Janeiro</option>
+                                <option value="1">Fevereiro</option>
+                                <option value="2">Março</option>
+                                <option value="3">Abril</option>
+                                <option value="4">Maio</option>
+                                <option value="5">Junho</option>
+                                <option value="6">Julho</option>
+                                <option value="7">Agosto</option>
+                                <option value="8">Setembro</option>
+                                <option value="9">Outubro</option>
+                                <option value="10">Novembro</option>
+                                <option value="11">Dezembro</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Ano:</span>
+                            <select id="installment-view-year"></select>
+                        </label>
+                        <div class="installment-view-toggle" role="group" aria-label="Modo de visualização">
+                            <button type="button" class="installment-view-btn active" data-installment-mode="full" title="Modo completo" aria-label="Modo completo">
+                                <i data-lucide="layout-list" class="lucide-icon"></i>
+                            </button>
+                            <button type="button" class="installment-view-btn" data-installment-mode="summary" title="Modo compacto" aria-label="Modo compacto">
+                                <i data-lucide="list" class="lucide-icon"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="installments-month-summary"></div>
                 <div id="installments-list">
                 </div>
             </div>
@@ -374,6 +434,7 @@
             </div>
         </div>
     </main>
+    </div>
 
     <!-- Modal de Transação -->
     <div id="transaction-modal" class="modal">
@@ -614,16 +675,24 @@
                     <input type="text" id="installment-description" required="">
                 </div>
                 <div class="form-group">
-                    <label for="installment-total">Valor Total:</label>
-                    <input type="number" id="installment-total" step="0.01">
+                    <label for="installment-reference-month">Mês da parcela:</label>
+                    <input type="month" id="installment-reference-month" required="">
                 </div>
                 <div class="form-group">
-                    <label for="installment-amount">Valor da Parcela:</label>
-                    <input type="number" id="installment-amount" step="0.01">
+                    <label for="installment-payment-day">Dia do pagamento:</label>
+                    <input type="number" id="installment-payment-day" min="1" max="31" value="1" required="">
                 </div>
                 <div class="form-group">
-                    <label for="installment-count">Número de Parcelas:</label>
-                    <input type="number" id="installment-count" required="">
+                    <label for="installment-amount">Valor da parcela:</label>
+                    <input type="number" id="installment-amount" step="0.01" min="0" required="">
+                </div>
+                <div class="form-group">
+                    <label for="installment-current">Parcela em questão:</label>
+                    <input type="number" id="installment-current" min="1" value="1" required="">
+                </div>
+                <div class="form-group">
+                    <label for="installment-count">Quantidade de parcelas:</label>
+                    <input type="number" id="installment-count" min="1" required="">
                 </div>
                 <div class="form-group installment-custom-toggle">
                     <input type="checkbox" id="installment-custom-enabled" hidden>
@@ -632,30 +701,12 @@
                     </button>
                 </div>
                 <div id="installment-custom-amounts" class="installment-custom-amounts" style="display: none;"></div>
-                <div class="form-group">
-                    <label for="installment-current">Parcela Atual:</label>
-                    <input type="number" id="installment-current" value="0" required="">
-                </div>
-                <div class="form-group">
-                    <label for="installment-start">Data de Início:</label>
-                    <input type="date" id="installment-start" required="">
-                </div>
-                <div class="form-group">
-                    <label for="installment-category">Categoria:</label>
-                    <select id="installment-category">
-                        <option value="alimentacao">Alimentação</option>
-                        <option value="transporte">Transporte</option>
-                        <option value="moradia">Moradia</option>
-                        <option value="saude">Saúde</option>
-                        <option value="lazer">Lazer</option>
-                        <option value="educacao">Educação</option>
-                        <option value="investimentos">Investimentos</option>
-                        <option value="servicos">Serviços</option>
-                        <option value="compras">Compras</option>
-                        <option value="eletronicos">Eletrônicos</option>
-                        <option value="outros">Outros</option>
-                    </select>
-                </div>
+                <label class="checkbox-label installment-paid-previous">
+                    <input type="checkbox" id="installment-previous-paid">
+                    Parcelas anteriores pagas
+                </label>
+                <input type="hidden" id="installment-start">
+                <input type="hidden" id="installment-category" value="compras">
                 <button type="submit" class="btn">Salvar Parcelamento</button>
             </form>
         </div>
@@ -776,7 +827,7 @@
 
     </div><!-- fim app-content -->
 
-    <script src="js/app.js?v=20260618-17"></script>
+    <script src="js/app.js?v=installment-arrows-pdf-20260624"></script>
 
 
 </body></html>

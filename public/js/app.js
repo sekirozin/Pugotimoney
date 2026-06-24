@@ -34,6 +34,36 @@ function toggleTheme() {
     window.app?.refreshIcons();
 }
 
+function isMobileNavigation() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function toggleMobileMenu() {
+    const sidebar = document.getElementById('sidebar-nav');
+    const backdrop = document.getElementById('mobile-menu-backdrop');
+    const button = document.getElementById('mobile-menu-button');
+
+    if (!isMobileNavigation()) {
+        const isExpanded = document.body.classList.toggle('sidebar-expanded');
+        sidebar?.classList.remove('open');
+        backdrop?.classList.remove('open');
+        button?.setAttribute('aria-expanded', String(isExpanded));
+        return;
+    }
+
+    const isOpen = sidebar?.classList.toggle('open') ?? false;
+    backdrop?.classList.toggle('open', isOpen);
+    button?.setAttribute('aria-expanded', String(isOpen));
+}
+
+function closeMobileMenu() {
+    document.getElementById('sidebar-nav')?.classList.remove('open');
+    document.getElementById('mobile-menu-backdrop')?.classList.remove('open');
+    if (isMobileNavigation()) {
+        document.getElementById('mobile-menu-button')?.setAttribute('aria-expanded', 'false');
+    }
+}
+
 applyTheme('dark');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -46,6 +76,13 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         handleRegister();
     });
+});
+
+window.addEventListener('resize', () => {
+    if (!isMobileNavigation()) {
+        document.getElementById('sidebar-nav')?.classList.remove('open');
+        document.getElementById('mobile-menu-backdrop')?.classList.remove('open');
+    }
 });
 
 // Funções de autenticação
@@ -351,6 +388,11 @@ class FinanceApp {
         this.charts = {};
         this.selectedMonth = new Date().getMonth();
         this.selectedYear = new Date().getFullYear();
+        this.installmentViewMonth = this.selectedMonth;
+        this.installmentViewYear = this.selectedYear;
+        this.installmentViewMode = 'full';
+        this.installmentSortMode = localStorage.getItem('installmentSortMode') || 'completion';
+        this.hiddenInstallmentEntries = this.loadHiddenInstallmentEntries();
         this.shoppingFilter = 'all';
         this.installmentPreviewIndexes = {};
         
@@ -371,6 +413,7 @@ class FinanceApp {
         const yearSelect = document.getElementById('dashboard-year');
         const reportYearSelect = document.getElementById('report-year');
         const filterYearSelect = document.getElementById('filter-year');
+        const installmentYearSelect = document.getElementById('installment-view-year');
         const currentYear = new Date().getFullYear();
         for (let y = currentYear - 5; y <= currentYear + 1; y++) {
             const opt = document.createElement('option');
@@ -379,6 +422,7 @@ class FinanceApp {
             if (yearSelect) yearSelect.appendChild(opt.cloneNode(true));
             if (reportYearSelect) reportYearSelect.appendChild(opt.cloneNode(true));
             if (filterYearSelect) filterYearSelect.appendChild(opt.cloneNode(true));
+            if (installmentYearSelect) installmentYearSelect.appendChild(opt.cloneNode(true));
         }
     }
 
@@ -389,12 +433,19 @@ class FinanceApp {
         const reportYearSelect = document.getElementById('report-year');
         const filterMonthSelect = document.getElementById('filter-month');
         const filterYearSelect = document.getElementById('filter-year');
+        const installmentMonthSelect = document.getElementById('installment-view-month');
+        const installmentYearSelect = document.getElementById('installment-view-year');
+        const installmentSortSelect = document.getElementById('installment-sort');
         if (monthSelect) monthSelect.value = this.selectedMonth;
         if (yearSelect) yearSelect.value = this.selectedYear;
         if (reportMonthSelect) reportMonthSelect.value = this.selectedMonth + 1;
         if (reportYearSelect) reportYearSelect.value = this.selectedYear;
         if (filterMonthSelect) filterMonthSelect.value = this.selectedMonth + 1;
         if (filterYearSelect) filterYearSelect.value = this.selectedYear;
+        if (installmentMonthSelect) installmentMonthSelect.value = this.installmentViewMonth;
+        if (installmentYearSelect) installmentYearSelect.value = this.installmentViewYear;
+        if (installmentSortSelect) installmentSortSelect.value = this.installmentSortMode;
+        this.updateInstallmentViewButtons();
     }
 
     onDashboardPeriodChange() {
@@ -405,10 +456,41 @@ class FinanceApp {
         this.updateDashboard();
     }
 
+    onInstallmentViewChange() {
+        const monthSelect = document.getElementById('installment-view-month');
+        const yearSelect = document.getElementById('installment-view-year');
+        if (monthSelect) this.installmentViewMonth = parseInt(monthSelect.value, 10);
+        if (yearSelect) this.installmentViewYear = parseInt(yearSelect.value, 10);
+        this.updateInstallmentViewButtons();
+        this.loadInstallments();
+    }
+
+    onInstallmentSortChange() {
+        const sortSelect = document.getElementById('installment-sort');
+        this.installmentSortMode = sortSelect?.value || 'completion';
+        localStorage.setItem('installmentSortMode', this.installmentSortMode);
+        this.loadInstallments();
+    }
+
+    setInstallmentViewMode(mode) {
+        this.installmentViewMode = mode === 'summary' ? 'summary' : 'full';
+        this.updateInstallmentViewButtons();
+        this.loadInstallments();
+    }
+
+    updateInstallmentViewButtons() {
+        document.querySelectorAll('[data-installment-mode]').forEach(button => {
+            const isActive = button.dataset.installmentMode === this.installmentViewMode;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-pressed', String(isActive));
+        });
+    }
+
     setupEventListeners() {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.navigateTo(e.target.dataset.page);
+                const button = e.target.closest('.nav-btn');
+                if (button?.dataset.page) this.navigateTo(button.dataset.page);
             });
         });
 
@@ -422,10 +504,11 @@ class FinanceApp {
         addListener('card-form', 'submit', (e) => { e.preventDefault(); this.addCreditCard(); });
         addListener('budget-form', 'submit', (e) => { e.preventDefault(); this.addBudget(); });
         addListener('installment-form', 'submit', (e) => { e.preventDefault(); this.addInstallment(); });
-        addListener('installment-total', 'input', () => { this.lastInstallmentEditedField = 'total'; this.syncInstallmentTotals(); });
         addListener('installment-count', 'input', () => { this.syncInstallmentTotals(); this.renderInstallmentAmountFields(); });
         addListener('installment-amount', 'input', () => { this.lastInstallmentEditedField = 'amount'; this.syncInstallmentTotals(); this.renderInstallmentAmountFields(); });
-        addListener('installment-start', 'change', () => { this.renderInstallmentAmountFields(); });
+        addListener('installment-reference-month', 'change', () => { this.updateInstallmentStartFromReference(); this.renderInstallmentAmountFields(); });
+        addListener('installment-payment-day', 'input', () => { this.updateInstallmentStartFromReference(); this.renderInstallmentAmountFields(); });
+        addListener('installment-current', 'input', () => { this.updateInstallmentStartFromReference(); this.renderInstallmentAmountFields(); });
         addListener('installment-custom-enabled', 'change', () => { this.toggleCustomInstallmentAmounts(); });
         addListener('installment-custom-toggle-btn', 'click', () => {
             const customEnabled = document.getElementById('installment-custom-enabled');
@@ -446,6 +529,12 @@ class FinanceApp {
         addListener('filter-date-end', 'change', () => { this.filterTransactions(); });
         addListener('dashboard-month', 'change', () => { this.onDashboardPeriodChange(); });
         addListener('dashboard-year', 'change', () => { this.onDashboardPeriodChange(); });
+        addListener('installment-view-month', 'change', () => { this.onInstallmentViewChange(); });
+        addListener('installment-view-year', 'change', () => { this.onInstallmentViewChange(); });
+        addListener('installment-sort', 'change', () => { this.onInstallmentSortChange(); });
+        document.querySelectorAll('[data-installment-mode]').forEach(button => {
+            button.addEventListener('click', () => this.setInstallmentViewMode(button.dataset.installmentMode));
+        });
         addListener('shopping-filter', 'change', () => {
             this.shoppingFilter = document.getElementById('shopping-filter').value;
             this.loadShoppingList();
@@ -453,11 +542,12 @@ class FinanceApp {
     }
 
     navigateTo(page) {
+        if (!page || !document.getElementById(page)) return;
         // Atualizar navegação
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.classList.remove('active');
         });
-        document.querySelector(`[data-page="${page}"]`).classList.add('active');
+        document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
 
         // Mostrar página
         document.querySelectorAll('.page').forEach(p => {
@@ -466,6 +556,7 @@ class FinanceApp {
         document.getElementById(page).style.display = 'block';
 
         this.currentPage = page;
+        closeMobileMenu();
         this.updatePageContent(page);
         this.refreshIcons();
     }
@@ -1440,25 +1531,210 @@ class FinanceApp {
         return total;
     }
 
+    formatCurrency(value) {
+        return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    getInstallmentDateAt(inst, index) {
+        const rawStartDate = (inst.startDate || inst.start_date || '').split('T')[0];
+        const startDate = rawStartDate ? new Date(rawStartDate + 'T00:00:00') : new Date();
+        const date = new Date(startDate);
+        date.setMonth(date.getMonth() + index);
+        return date;
+    }
+
+    formatMonthInputValue(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}`;
+    }
+
+    formatDateInputValue(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    getDefaultInstallmentReferenceMonth() {
+        return this.formatMonthInputValue(new Date(this.installmentViewYear, this.installmentViewMonth, 1));
+    }
+
+    calculateInstallmentStartDate(referenceMonthValue, referenceInstallment, paymentDay = 1) {
+        if (!referenceMonthValue || !Number.isFinite(referenceInstallment) || referenceInstallment < 1) return '';
+        const [year, month] = referenceMonthValue.split('-').map(Number);
+        if (!Number.isFinite(year) || !Number.isFinite(month)) return '';
+
+        const safeDay = Math.max(1, Math.min(Number(paymentDay) || 1, 31));
+        const referenceDate = new Date(year, month - 1, 1);
+        const maxReferenceDay = new Date(year, month, 0).getDate();
+        referenceDate.setDate(Math.min(safeDay, maxReferenceDay));
+
+        const startDate = new Date(referenceDate);
+        startDate.setMonth(startDate.getMonth() - (referenceInstallment - 1));
+        const maxStartDay = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0).getDate();
+        startDate.setDate(Math.min(safeDay, maxStartDay));
+        return this.formatDateInputValue(startDate);
+    }
+
+    updateInstallmentStartFromReference() {
+        const referenceMonthInput = document.getElementById('installment-reference-month');
+        const paymentDayInput = document.getElementById('installment-payment-day');
+        const currentInput = document.getElementById('installment-current');
+        const startInput = document.getElementById('installment-start');
+        if (!referenceMonthInput || !currentInput || !startInput) return;
+
+        const referenceInstallment = parseInt(currentInput.value || '1', 10);
+        const paymentDay = parseInt(paymentDayInput?.value || '1', 10);
+        const startDate = this.calculateInstallmentStartDate(referenceMonthInput.value, referenceInstallment, paymentDay);
+        if (startDate) startInput.value = startDate;
+    }
+
+    getInstallmentEntryForMonth(inst, month = this.installmentViewMonth, year = this.installmentViewYear) {
+        const totalInstallments = Number(inst.totalInstallments || inst.total_installments || 0);
+        const paidInstallments = Math.max(0, Math.min(Number(inst.currentInstallment ?? inst.current_installment ?? 0), totalInstallments));
+
+        for (let index = 0; index < totalInstallments; index++) {
+            const installmentDate = this.getInstallmentDateAt(inst, index);
+            if (installmentDate.getMonth() !== month || installmentDate.getFullYear() !== year) continue;
+
+            return {
+                index,
+                amount: this.getInstallmentAmountAt(inst, index),
+                isPaid: index < paidInstallments,
+                totalInstallments,
+                paidInstallments,
+                monthLabel: this.getInstallmentMonthLabel(inst, index)
+            };
+        }
+
+        return null;
+    }
+
+    getInstallmentEntryKey(inst, entry, month = this.installmentViewMonth, year = this.installmentViewYear) {
+        return `${inst.id}:${year}:${month}:${entry.index}`;
+    }
+
+    loadHiddenInstallmentEntries() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem('hiddenInstallmentEntries') || '{}');
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    }
+
+    saveHiddenInstallmentEntries() {
+        localStorage.setItem('hiddenInstallmentEntries', JSON.stringify(this.hiddenInstallmentEntries || {}));
+    }
+
+    isInstallmentEntryHidden(inst, entry, month = this.installmentViewMonth, year = this.installmentViewYear) {
+        return Boolean(this.hiddenInstallmentEntries?.[this.getInstallmentEntryKey(inst, entry, month, year)]);
+    }
+
+    toggleInstallmentEntryHidden(id, index) {
+        const inst = this.installments.find(item => Number(item.id) === Number(id));
+        if (!inst) return;
+
+        const entry = this.getInstallmentEntryForMonth(inst);
+        if (!entry || Number(entry.index) !== Number(index)) return;
+
+        const key = this.getInstallmentEntryKey(inst, entry);
+        if (this.hiddenInstallmentEntries[key]) {
+            delete this.hiddenInstallmentEntries[key];
+        } else {
+            this.hiddenInstallmentEntries[key] = true;
+        }
+
+        this.saveHiddenInstallmentEntries();
+        this.loadInstallments();
+    }
+
+    sortInstallmentEntries(entries) {
+        const byDescription = (a, b) => String(a.inst.description || '').localeCompare(String(b.inst.description || ''));
+        const byCompletion = (a, b) => {
+            const remainingA = Math.max(a.entry.totalInstallments - a.entry.paidInstallments, 0);
+            const remainingB = Math.max(b.entry.totalInstallments - b.entry.paidInstallments, 0);
+            return remainingA - remainingB || b.entry.paidInstallments - a.entry.paidInstallments || byDescription(a, b);
+        };
+
+        return entries.sort((a, b) => {
+            switch (this.installmentSortMode) {
+                case 'value-desc':
+                    return b.entry.amount - a.entry.amount || byCompletion(a, b);
+                case 'value-asc':
+                    return a.entry.amount - b.entry.amount || byCompletion(a, b);
+                case 'date-asc':
+                    return this.getInstallmentDateAt(a.inst, a.entry.index) - this.getInstallmentDateAt(b.inst, b.entry.index) || byCompletion(a, b);
+                case 'date-desc':
+                    return this.getInstallmentDateAt(b.inst, b.entry.index) - this.getInstallmentDateAt(a.inst, a.entry.index) || byCompletion(a, b);
+                case 'completion':
+                default:
+                    return byCompletion(a, b);
+            }
+        });
+    }
+
+    getInstallmentMonthSummary(month = this.installmentViewMonth, year = this.installmentViewYear) {
+        const summary = { total: 0, paid: 0, pending: 0, count: 0, paidCount: 0, pendingCount: 0 };
+
+        (this.installments || []).forEach(inst => {
+            const entry = this.getInstallmentEntryForMonth(inst, month, year);
+            if (!entry) return;
+            if (this.isInstallmentEntryHidden(inst, entry, month, year)) return;
+
+            summary.total += entry.amount;
+            summary.count += 1;
+
+            if (entry.isPaid) {
+                summary.paid += entry.amount;
+                summary.paidCount += 1;
+            } else {
+                summary.pending += entry.amount;
+                summary.pendingCount += 1;
+            }
+        });
+
+        return summary;
+    }
+
+    renderInstallmentMonthSummary() {
+        const summaryElement = document.getElementById('installments-month-summary');
+        if (!summaryElement) return;
+
+        const summary = this.getInstallmentMonthSummary(this.installmentViewMonth, this.installmentViewYear);
+        const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+        summaryElement.innerHTML = `
+            <div class="installment-month-summary">
+                <div>
+                    <span class="summary-label">Total de parcelas em ${monthNames[this.installmentViewMonth]}/${this.installmentViewYear}</span>
+                    <strong>${this.formatCurrency(summary.total)}</strong>
+                    <small>${summary.count} parcela(s) no mês</small>
+                </div>
+                <div>
+                    <span class="summary-label">Pago</span>
+                    <strong class="summary-paid">${this.formatCurrency(summary.paid)}</strong>
+                    <small>${summary.paidCount} parcela(s)</small>
+                </div>
+                <div>
+                    <span class="summary-label">Pendente</span>
+                    <strong class="summary-pending">${this.formatCurrency(summary.pending)}</strong>
+                    <small>${summary.pendingCount} parcela(s)</small>
+                </div>
+            </div>
+        `;
+    }
+
     syncInstallmentTotals() {
-        const totalInput = document.getElementById('installment-total');
         const countInput = document.getElementById('installment-count');
         const amountInput = document.getElementById('installment-amount');
         const customEnabled = document.getElementById('installment-custom-enabled');
-        if (!totalInput || !countInput || !amountInput || customEnabled?.checked) return;
+        if (!countInput || !amountInput || customEnabled?.checked) return;
 
-        const total = Number(totalInput.value);
         const count = Number(countInput.value);
         const amount = Number(amountInput.value);
-
-        if (this.lastInstallmentEditedField === 'amount' && Number.isFinite(amount) && Number.isFinite(count) && count > 0) {
-            totalInput.value = (Math.round((amount * count) * 100) / 100).toFixed(2);
-            return;
-        }
-
-        if (Number.isFinite(total) && Number.isFinite(count) && count > 0) {
-            amountInput.value = (Math.round((total / count) * 100) / 100).toFixed(2);
-        }
+        if (!Number.isFinite(amount) || !Number.isFinite(count) || count <= 0) return;
     }
 
     syncDefaultInstallmentAmount() {
@@ -1492,15 +1768,13 @@ class FinanceApp {
     }
 
     updateInstallmentDerivedFields() {
-        const totalInput = document.getElementById('installment-total');
         const amountInput = document.getElementById('installment-amount');
         const countInput = document.getElementById('installment-count');
         const customAmounts = this.getCustomInstallmentAmounts();
-        if (!Array.isArray(customAmounts) || !totalInput || !amountInput || !countInput) return;
+        if (!Array.isArray(customAmounts) || !amountInput || !countInput) return;
 
         const total = customAmounts.reduce((sum, amount) => sum + Number(amount || 0), 0);
         const count = customAmounts.length || Number(countInput.value) || 0;
-        totalInput.value = total > 0 ? total.toFixed(2) : '';
         amountInput.value = count > 0 && total > 0 ? (Math.round((total / count) * 100) / 100).toFixed(2) : '';
     }
 
@@ -1567,36 +1841,95 @@ class FinanceApp {
         this.loadInstallments();
     }
 
+    renderInstallmentsSummaryView(list) {
+        const entries = (this.installments || [])
+            .map(inst => ({ inst, entry: this.getInstallmentEntryForMonth(inst) }))
+            .filter(item => item.entry);
+
+        if (entries.length === 0) {
+            list.innerHTML = '<p style="text-align: center; color: #666;">Nenhum parcelamento para o mês selecionado</p>';
+            return;
+        }
+
+        this.sortInstallmentEntries(entries);
+
+        entries.forEach(({ inst, entry }) => {
+            const isHidden = this.isInstallmentEntryHidden(inst, entry);
+            const item = document.createElement('div');
+            item.className = `installment-summary-row ${isHidden ? 'is-hidden-from-total' : ''}`;
+            item.innerHTML = `
+                <div>
+                    <h4>${esc(inst.description)}</h4>
+                    <small>Parcela ${entry.index + 1} de ${entry.totalInstallments} - ${entry.monthLabel}</small>
+                </div>
+                <div class="installment-summary-actions">
+                    <div class="installment-summary-value">
+                        <strong>${this.formatCurrency(entry.amount)}</strong>
+                        <span class="${entry.isPaid ? 'paid' : 'pending'}">${entry.isPaid ? 'Paga' : 'Pendente'}</span>
+                    </div>
+                    <div class="installment-summary-buttons">
+                        <button class="btn-small installment-visibility-btn ${isHidden ? 'muted' : ''}" onclick="toggleInstallmentEntryHidden(${inst.id}, ${entry.index})" title="${isHidden ? 'Incluir na soma do mês' : 'Remover da soma do mês'}" aria-label="${isHidden ? 'Incluir na soma do mês' : 'Remover da soma do mês'}">
+                            <i data-lucide="${isHidden ? 'eye-off' : 'eye'}" class="lucide-icon"></i>
+                        </button>
+                        <button class="btn-small" onclick="editInstallment(${inst.id})" title="Editar" aria-label="Editar parcelamento">
+                            <i data-lucide="pencil" class="lucide-icon"></i>
+                        </button>
+                        <button class="btn-small btn-danger" onclick="deleteInstallment(${inst.id})" title="Excluir" aria-label="Excluir parcelamento">
+                            <i data-lucide="trash-2" class="lucide-icon"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            list.appendChild(item);
+        });
+        this.refreshIcons();
+    }
+
     loadInstallments() {
         const list = document.getElementById('installments-list');
         list.innerHTML = '';
+        this.renderInstallmentMonthSummary();
 
         if (this.installments.length === 0) {
             list.innerHTML = '<p style="text-align: center; color: #666;">Nenhum parcelamento cadastrado</p>';
             return;
         }
 
-        this.installments.forEach(inst => {
-            const totalAmount = inst.totalAmount || inst.total_amount || 0;
-            const installmentAmount = inst.installmentAmount || inst.installment_amount || 0;
+        if (this.installmentViewMode === 'summary') {
+            this.renderInstallmentsSummaryView(list);
+            return;
+        }
+
+        const entries = [...this.installments]
+            .map(inst => ({ inst, entry: this.getInstallmentEntryForMonth(inst) }))
+            .filter(item => item.entry);
+
+        if (entries.length === 0) {
+            list.innerHTML = '<p style="text-align: center; color: #666;">Nenhum parcelamento para o mês selecionado</p>';
+            return;
+        }
+
+        const sortedEntries = this.sortInstallmentEntries(entries);
+
+        sortedEntries.forEach(({ inst, entry }) => {
             const totalInstallments = inst.totalInstallments || inst.total_installments || 0;
             const currentInstallment = inst.currentInstallment ?? inst.current_installment ?? 0;
             const paidInstallments = Math.max(0, Math.min(currentInstallment, totalInstallments));
             const remaining = Math.max(totalInstallments - paidInstallments, 0);
             const progress = totalInstallments > 0 ? (paidInstallments / totalInstallments) * 100 : 0;
-            const currentAmount = this.getInstallmentAmountAt(inst, paidInstallments);
             const remainingAmount = this.sumInstallmentAmounts(inst, paidInstallments, totalInstallments);
             const paidAmount = this.sumInstallmentAmounts(inst, 0, paidInstallments);
             const isCompleted = paidInstallments >= totalInstallments;
-            const variableAmounts = this.parseInstallmentAmounts(inst);
-            const hasVariableAmounts = variableAmounts.length > 0;
-            const previewFallback = this.getFocusedInstallmentIndex(inst, totalInstallments);
-            const previewIndex = Math.max(0, Math.min(this.installmentPreviewIndexes[inst.id] ?? previewFallback, totalInstallments - 1));
-            const previewAmount = this.getInstallmentAmountAt(inst, previewIndex);
-            const previewMonthLabel = this.getInstallmentMonthLabel(inst, previewIndex);
-            const previewIsPaid = previewIndex < paidInstallments;
-            const previewStatusLabel = previewIsPaid ? 'Parcela paga' : (previewIndex === paidInstallments && !isCompleted ? 'Valor a pagar' : 'Parcela futura');
-            this.installmentPreviewIndexes[inst.id] = previewIndex;
+            const selectedIndex = entry.index;
+            const selectedIsPaid = entry.isPaid;
+            const selectedMonthLabel = entry.monthLabel;
+            const displayIndex = this.installmentPreviewIndexes[inst.id] ?? selectedIndex;
+            const displayAmount = this.getInstallmentAmountAt(inst, displayIndex);
+            const displayMonthLabel = this.getInstallmentMonthLabel(inst, displayIndex);
+            const displayIsPaid = displayIndex < paidInstallments;
+            const selectedStatusLabel = selectedIsPaid ? 'Parcela paga' : 'Valor do mês';
+            const selectedProgress = displayIsPaid ? 100 : progress;
+            const isHidden = this.isInstallmentEntryHidden(inst, entry);
 
             // Mês de referência da próxima parcela
             const startDate = new Date((inst.startDate || inst.start_date || '').split('T')[0] + 'T00:00:00');
@@ -1604,53 +1937,61 @@ class FinanceApp {
             const currentMonthLabel = monthNames[startDate.getMonth()] + '/' + startDate.getFullYear();
 
             const item = document.createElement('div');
-            item.className = 'card';
-            item.style.marginBottom = '15px';
+            item.className = `card installment-card ${isHidden ? 'is-hidden-from-total' : ''}`;
             item.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div style="flex: 1;">
+                <div class="installment-card-header">
+                    <div>
                         <h3>${esc(inst.description)}</h3>
-                        <p><strong>Categoria:</strong> ${esc(inst.category)}</p>
-                        <p><strong>Parcelas Pagas:</strong> ${paidInstallments} de ${totalInstallments}</p>
-                        <p><strong>Início:</strong> ${currentMonthLabel}</p>
-                        <p><strong>Mês em foco:</strong> ${previewMonthLabel}</p>
-                        <p><strong>Valor Pago:</strong> R$ ${paidAmount.toFixed(2)}</p>
-                        <p><strong>Parcelas Restantes:</strong> ${remaining}</p>
-                        <p><strong>Valor Restante:</strong> R$ ${remainingAmount.toFixed(2)}</p>
+                        <span class="installment-card-category">${esc(inst.category)}</span>
                     </div>
-                    <div style="text-align: right;">
-                        <span style="display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; background: ${isCompleted ? '#2ecc71' : '#f39c12'}; color: white;">
+                    <div class="installment-card-top-actions">
+                        <span class="installment-status-badge ${isCompleted ? 'completed' : 'active'}">
                             ${isCompleted ? 'Concluído' : 'Em andamento'}
                         </span>
-                        <div style="margin-top: 8px;">
+                        <div class="installment-action-buttons">
+                            <button class="btn-small installment-visibility-btn ${isHidden ? 'muted' : ''}" onclick="toggleInstallmentEntryHidden(${inst.id}, ${entry.index})" title="${isHidden ? 'Incluir na soma do mês' : 'Remover da soma do mês'}" aria-label="${isHidden ? 'Incluir na soma do mês' : 'Remover da soma do mês'}"><i data-lucide="${isHidden ? 'eye-off' : 'eye'}" class="lucide-icon"></i></button>
                             <button class="btn-small" onclick="editInstallment(${inst.id})" title="Editar"><i data-lucide="pencil" class="lucide-icon"></i></button>
                             <button class="btn-small btn-danger" onclick="deleteInstallment(${inst.id})" title="Excluir"><i data-lucide="trash-2" class="lucide-icon"></i></button>
                         </div>
+                    </div>
+                </div>
+                <div class="installment-card-main">
+                    <div class="installment-card-details">
+                        <div class="installment-info-grid">
+                            <span><strong>Pagas</strong>${paidInstallments} de ${totalInstallments}</span>
+                            <span><strong>Restantes</strong>${remaining}</span>
+                            <span><strong>Início</strong>${currentMonthLabel}</span>
+                            <span><strong>Mês em foco</strong>${selectedMonthLabel}</span>
+                            <span><strong>Valor pago</strong>R$ ${paidAmount.toFixed(2)}</span>
+                            <span><strong>Valor restante</strong>R$ ${remainingAmount.toFixed(2)}</span>
+                        </div>
+                    </div>
+                    <div class="installment-card-actions">
                         <div class="installment-focus">
-                            <div class="installment-focus-label">${previewStatusLabel}</div>
+                            <div class="installment-focus-label">${selectedStatusLabel}</div>
                             <div class="installment-focus-row">
-                                <button type="button" class="installment-preview-btn" onclick="app.changeInstallmentPreview(${inst.id}, -1)" ${previewIndex <= 0 ? 'disabled' : ''} title="Parcela anterior">
+                                <button class="installment-preview-btn" onclick="app.changeInstallmentPreview(${inst.id}, -1)" ${displayIndex <= 0 ? 'disabled' : ''} aria-label="Parcela anterior">
                                     <i data-lucide="chevron-left" class="lucide-icon"></i>
                                 </button>
-                                <div class="installment-focus-value ${previewIsPaid ? 'paid' : ''}">R$ ${previewAmount.toFixed(2)}</div>
-                                <button type="button" class="installment-preview-btn" onclick="app.changeInstallmentPreview(${inst.id}, 1)" ${previewIndex >= totalInstallments - 1 ? 'disabled' : ''} title="Proxima parcela">
+                                <div class="installment-focus-value ${displayIsPaid ? 'paid' : ''}">R$ ${displayAmount.toFixed(2)}</div>
+                                <button class="installment-preview-btn" onclick="app.changeInstallmentPreview(${inst.id}, 1)" ${displayIndex >= totalInstallments - 1 ? 'disabled' : ''} aria-label="Próxima parcela">
                                     <i data-lucide="chevron-right" class="lucide-icon"></i>
                                 </button>
                             </div>
-                            <div class="installment-focus-meta">Parcela ${previewIndex + 1} de ${totalInstallments} - ${previewMonthLabel}</div>
+                            <div class="installment-focus-meta">Parcela ${displayIndex + 1} de ${totalInstallments} - ${displayMonthLabel}</div>
                         </div>
                     </div>
                 </div>
-                <div style="margin-top: 10px;">
-                    <div style="background: #e0e0e0; height: 8px; border-radius: 4px; overflow: hidden;">
-                        <div style="background: ${paidInstallments > 0 ? '#2ecc71' : '#3498db'}; height: 100%; width: ${progress}%;"></div>
+                <div class="installment-progress-block">
+                    <div class="installment-progress-track">
+                        <div class="installment-progress-fill ${displayIsPaid ? 'has-paid' : 'pending-month'}" style="width: ${selectedProgress}%;"></div>
                     </div>
-                    <p style="font-size: 12px; color: #666; margin-top: 4px;">${progress.toFixed(0)}% pago</p>
+                    <p>${displayIsPaid ? 'Parcela visualizada paga' : `${progress.toFixed(0)}% pago até o momento`}</p>
                 </div>
-                ${previewIsPaid
+                ${selectedIsPaid
                     ? '<span class="installment-paid-label"><i data-lucide="check-circle-2" class="lucide-icon"></i> Parcela paga</span>'
                     : !isCompleted
-                        ? `<button class="btn" style="margin-top: 10px; padding: 5px 15px; font-size: 12px;" onclick="markInstallmentPaid(${inst.id})"><i data-lucide="check" class="lucide-icon"></i> Marcar Parcela como Paga</button>`
+                        ? `<button class="btn installment-pay-button" onclick="markInstallmentPaid(${inst.id})"><i data-lucide="check" class="lucide-icon"></i> Marcar Parcela como Paga</button>`
                         : ''}
             `;
             list.appendChild(item);
@@ -1723,29 +2064,41 @@ class FinanceApp {
 
     async addInstallment() {
         const description = document.getElementById('installment-description').value;
-        let totalAmount = parseFloat(document.getElementById('installment-total').value);
         let installmentAmount = parseFloat(document.getElementById('installment-amount').value);
         const totalInstallments = parseInt(document.getElementById('installment-count').value);
-        const category = document.getElementById('installment-category').value;
+        const category = document.getElementById('installment-category')?.value || 'compras';
+        this.updateInstallmentStartFromReference();
         const startDate = document.getElementById('installment-start').value;
         const editId = document.getElementById('installment-modal').dataset.editId;
-        const currentInstallment = editId
-            ? parseInt(document.getElementById('installment-current').value)
-            : 0;
-        const installmentAmounts = this.getCustomInstallmentAmounts();
+        const referenceInstallment = parseInt(document.getElementById('installment-current').value || '1', 10);
+        const previousPaid = document.getElementById('installment-previous-paid')?.checked;
+        const currentInstallment = previousPaid ? Math.max(0, referenceInstallment - 1) : 0;
+        let installmentAmounts = this.getCustomInstallmentAmounts();
         if (Array.isArray(installmentAmounts) && installmentAmounts.length > 0) {
-            totalAmount = installmentAmounts.reduce((sum, amount) => sum + Number(amount || 0), 0);
-            installmentAmount = totalInstallments > 0
-                ? Math.round((totalAmount / totalInstallments) * 100) / 100
-                : 0;
-        } else if (Number.isFinite(installmentAmount) && Number.isFinite(totalInstallments) && totalInstallments > 0 && !Number.isFinite(totalAmount)) {
-            totalAmount = Math.round((installmentAmount * totalInstallments) * 100) / 100;
-        } else if (Number.isFinite(totalAmount) && Number.isFinite(totalInstallments) && totalInstallments > 0 && !Number.isFinite(installmentAmount)) {
-            installmentAmount = Math.round((totalAmount / totalInstallments) * 100) / 100;
+            installmentAmounts = installmentAmounts.slice(0, totalInstallments);
+            const customTotal = installmentAmounts.reduce((sum, amount) => sum + Number(amount || 0), 0);
+            installmentAmount = totalInstallments > 0 ? Math.round((customTotal / totalInstallments) * 100) / 100 : 0;
+        } else {
+            installmentAmounts = null;
         }
+        const totalAmount = Array.isArray(installmentAmounts)
+            ? Math.round(installmentAmounts.reduce((sum, amount) => sum + Number(amount || 0), 0) * 100) / 100
+            : Number.isFinite(installmentAmount) && Number.isFinite(totalInstallments)
+            ? Math.round((installmentAmount * totalInstallments) * 100) / 100
+            : NaN;
 
         if (!description || !Number.isFinite(totalAmount) || !Number.isFinite(installmentAmount) || !Number.isFinite(totalInstallments) || totalInstallments <= 0) {
             alert('Informe a descrição, a quantidade de parcelas e os valores do parcelamento.');
+            return;
+        }
+
+        if (!Number.isFinite(referenceInstallment) || referenceInstallment < 1 || referenceInstallment > totalInstallments) {
+            alert('A parcela do mês selecionado precisa estar entre 1 e o número total de parcelas.');
+            return;
+        }
+
+        if (!startDate) {
+            alert('Informe o mês da parcela atual para calcular a data de início.');
             return;
         }
 
@@ -1926,6 +2279,17 @@ class FinanceApp {
     }
 
     openInstallmentModal() {
+        const modal = document.getElementById('installment-modal');
+        const isEditing = Boolean(modal?.dataset.editId);
+        if (!isEditing) {
+            const referenceMonthInput = document.getElementById('installment-reference-month');
+            const paymentDayInput = document.getElementById('installment-payment-day');
+            const currentInput = document.getElementById('installment-current');
+            if (referenceMonthInput) referenceMonthInput.value = this.getDefaultInstallmentReferenceMonth();
+            if (paymentDayInput && !paymentDayInput.value) paymentDayInput.value = String(new Date().getDate());
+            if (currentInput && (!currentInput.value || Number(currentInput.value) < 1)) currentInput.value = '1';
+            this.updateInstallmentStartFromReference();
+        }
         document.getElementById('installment-modal').style.display = 'block';
     }
 
@@ -1945,6 +2309,16 @@ class FinanceApp {
             customAmounts.innerHTML = '';
             customAmounts.style.display = 'none';
         }
+        const referenceMonthInput = document.getElementById('installment-reference-month');
+        const paymentDayInput = document.getElementById('installment-payment-day');
+        const currentInput = document.getElementById('installment-current');
+        const startInput = document.getElementById('installment-start');
+        const previousPaidInput = document.getElementById('installment-previous-paid');
+        if (referenceMonthInput) referenceMonthInput.value = '';
+        if (paymentDayInput) paymentDayInput.value = '1';
+        if (currentInput) currentInput.value = '1';
+        if (startInput) startInput.value = '';
+        if (previousPaidInput) previousPaidInput.checked = false;
         delete document.getElementById('installment-modal').dataset.editId;
         document.getElementById('installment-modal').querySelector('h2').textContent = 'Novo Parcelamento';
     }
@@ -2237,12 +2611,22 @@ async function editInstallment(id) {
     const inst = app.installments.find(i => i.id == id);
     if (!inst) return;
     document.getElementById('installment-description').value = inst.description;
-    document.getElementById('installment-total').value = inst.totalAmount || inst.total_amount || 0;
     document.getElementById('installment-amount').value = inst.installmentAmount || inst.installment_amount || 0;
     document.getElementById('installment-count').value = inst.totalInstallments || inst.total_installments || 0;
-    document.getElementById('installment-current').value = inst.currentInstallment || inst.current_installment || 0;
-    document.getElementById('installment-category').value = inst.category || 'Compras';
-    document.getElementById('installment-start').value = (inst.startDate || inst.start_date || '').split('T')[0];
+    const paidInstallments = Number(inst.currentInstallment ?? inst.current_installment ?? 0);
+    const totalInstallments = Number(inst.totalInstallments || inst.total_installments || 0);
+    const referenceInstallment = Math.max(1, Math.min(paidInstallments + 1, totalInstallments || paidInstallments + 1));
+    document.getElementById('installment-current').value = referenceInstallment;
+    document.getElementById('installment-category').value = inst.category || 'compras';
+    document.getElementById('installment-previous-paid').checked = paidInstallments > 0;
+    const startDateValue = (inst.startDate || inst.start_date || '').split('T')[0];
+    document.getElementById('installment-start').value = startDateValue;
+    if (startDateValue) {
+        const referenceDate = new Date(startDateValue + 'T00:00:00');
+        referenceDate.setMonth(referenceDate.getMonth() + (referenceInstallment - 1));
+        document.getElementById('installment-reference-month').value = app.formatMonthInputValue(referenceDate);
+        document.getElementById('installment-payment-day').value = String(referenceDate.getDate());
+    }
     const amounts = app.parseInstallmentAmounts(inst);
     const customEnabled = document.getElementById('installment-custom-enabled');
     const customAmounts = document.getElementById('installment-custom-amounts');
@@ -2258,6 +2642,10 @@ async function editInstallment(id) {
     document.getElementById('installment-modal').dataset.editId = id;
     document.getElementById('installment-modal').querySelector('h2').textContent = 'Editar Parcelamento';
     openInstallmentModal();
+}
+
+function toggleInstallmentEntryHidden(id, index) {
+    app.toggleInstallmentEntryHidden(id, index);
 }
 
 async function markSubscriptionPaid(id) {

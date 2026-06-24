@@ -241,7 +241,7 @@ app.get('/api/export/:type', authMiddleware, adminMiddleware, async (req: AuthRe
 });
 
 // Rota para extrato PDF mensal
-app.get('/api/report/statement', authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+app.get('/api/report/statement', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const { year, month, sections } = req.query;
         const now = new Date();

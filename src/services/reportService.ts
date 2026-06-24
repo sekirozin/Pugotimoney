@@ -16,6 +16,54 @@ function formatDate(value: string): string {
     return year && month && day ? `${day}/${month}/${year}` : value || '';
 }
 
+function parseInstallmentAmounts(installment: any): number[] {
+    const raw = installment?.installmentAmounts ?? installment?.installment_amounts;
+    if (Array.isArray(raw)) return raw.map(Number).filter(amount => Number.isFinite(amount) && amount >= 0);
+    if (typeof raw === 'string' && raw.trim()) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed.map(Number).filter(amount => Number.isFinite(amount) && amount >= 0);
+        } catch (error) {
+            return [];
+        }
+    }
+    return [];
+}
+
+function getInstallmentAmountAt(installment: any, index: number): number {
+    const amounts = parseInstallmentAmounts(installment);
+    const customAmount = amounts[index];
+    if (Number.isFinite(customAmount)) return customAmount;
+    return Number(installment?.installmentAmount ?? installment?.installment_amount ?? 0);
+}
+
+function getInstallmentDateAt(installment: any, index: number): Date {
+    const startDate = new Date((installment.startDate || installment.start_date || '').split('T')[0] + 'T00:00:00');
+    const date = new Date(startDate);
+    date.setMonth(date.getMonth() + index);
+    return date;
+}
+
+function getInstallmentEntryForMonth(installment: any, month: number, year: number) {
+    const totalInstallments = Number(installment.totalInstallments || installment.total_installments || 0);
+    const paidInstallments = Math.max(0, Math.min(Number(installment.currentInstallment ?? installment.current_installment ?? 0), totalInstallments));
+
+    for (let index = 0; index < totalInstallments; index++) {
+        const installmentDate = getInstallmentDateAt(installment, index);
+        if (installmentDate.getMonth() + 1 !== month || installmentDate.getFullYear() !== year) continue;
+
+        return {
+            index,
+            amount: getInstallmentAmountAt(installment, index),
+            isPaid: index < paidInstallments,
+            totalInstallments,
+            paidInstallments
+        };
+    }
+
+    return null;
+}
+
 function addSectionTitle(doc: PdfDoc, title: string, subtitle?: string) {
     if (doc.y > 650) doc.addPage();
     doc.moveDown(0.4);
@@ -129,12 +177,13 @@ export class ReportService {
                     .filter(t => t.type === 'expense')
                     .reduce((sum, t) => sum + t.amount, 0);
 
-                const monthlyInstallments = installments.reduce((sum, i) => {
-                    if (i.currentInstallment < i.totalInstallments) {
-                        return sum + i.installmentAmount;
-                    }
-                    return sum;
-                }, 0);
+                const monthlyInstallmentEntries = installments
+                    .map(i => ({ installment: i, entry: getInstallmentEntryForMonth(i, month, year) }))
+                    .filter((item): item is { installment: any; entry: NonNullable<ReturnType<typeof getInstallmentEntryForMonth>> } => Boolean(item.entry));
+
+                const monthlyInstallments = monthlyInstallmentEntries
+                    .filter(({ entry }) => !entry.isPaid)
+                    .reduce((sum, { entry }) => sum + entry.amount, 0);
 
                 const monthNames = [
                     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -205,22 +254,23 @@ export class ReportService {
                 }
 
                 // Installments
-                if (selectedSections.has('installments') && installments.length > 0) {
+                if (selectedSections.has('installments') && monthlyInstallmentEntries.length > 0) {
                     doc.addPage();
-                    addSectionTitle(doc, 'Parcelamentos');
+                    addSectionTitle(doc, 'Parcelamentos', 'Somente parcelas do mês selecionado.');
                     drawTable(doc, [
                         { header: 'Descrição', key: 'description', width: 210 },
                         { header: 'Parcela', key: 'installment', width: 70, align: 'center' },
                         { header: 'Valor Parc.', key: 'installmentAmount', width: 90, align: 'right' },
                         { header: 'Total', key: 'totalAmount', width: 80, align: 'right' },
                         { header: 'Status', key: 'status', width: 60 }
-                    ], installments.map(i => ({
-                        description: i.description,
-                        installment: `${i.currentInstallment}/${i.totalInstallments}`,
-                        installmentAmount: formatCurrency(i.installmentAmount),
-                        totalAmount: formatCurrency(i.totalAmount),
-                        status: i.currentInstallment >= i.totalInstallments ? 'Pago' : 'Pendente'
+                    ], monthlyInstallmentEntries.map(({ installment, entry }) => ({
+                        description: installment.description,
+                        installment: `${entry.index + 1}/${entry.totalInstallments}`,
+                        installmentAmount: formatCurrency(entry.amount),
+                        totalAmount: formatCurrency(entry.amount * entry.totalInstallments),
+                        status: entry.isPaid ? 'Pago' : 'Pendente'
                     })));
+                    addTotal(doc, 'Total pendente em parcelamentos', monthlyInstallments);
                 }
 
                 // Credit Cards
