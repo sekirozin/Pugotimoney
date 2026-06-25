@@ -16,6 +16,13 @@ function formatDate(value: string): string {
     return year && month && day ? `${day}/${month}/${year}` : value || '';
 }
 
+function formatDateObject(value: Date): string {
+    const day = String(value.getDate()).padStart(2, '0');
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const year = value.getFullYear();
+    return `${day}/${month}/${year}`;
+}
+
 function parseInstallmentAmounts(installment: any): number[] {
     const raw = installment?.installmentAmounts ?? installment?.installment_amounts;
     if (Array.isArray(raw)) return raw.map(Number).filter(amount => Number.isFinite(amount) && amount >= 0);
@@ -201,24 +208,31 @@ export class ReportService {
                 doc.y = 116;
 
                 const balance = monthlyIncome - monthlyExpenses - monthlyInstallments;
-                addSectionTitle(doc, 'Resumo Financeiro');
-                drawTable(doc, [
-                    { header: 'Receitas', key: 'income', width: 125, align: 'right' },
-                    { header: 'Gastos', key: 'expenses', width: 125, align: 'right' },
-                    { header: 'Parcelamentos', key: 'installments', width: 125, align: 'right' },
-                    { header: 'Saldo', key: 'balance', width: 135, align: 'right' }
-                ], [{
-                    income: formatCurrency(monthlyIncome),
-                    expenses: formatCurrency(monthlyExpenses),
-                    installments: formatCurrency(monthlyInstallments),
-                    balance: formatCurrency(balance)
-                }]);
-                doc.moveDown(1);
+                const onlyInstallmentsSelected = selectedSections.size === 1 && selectedSections.has('installments');
+                let hasBodyContent = false;
+
+                if (!onlyInstallmentsSelected) {
+                    addSectionTitle(doc, 'Resumo Financeiro');
+                    drawTable(doc, [
+                        { header: 'Receitas', key: 'income', width: 125, align: 'right' },
+                        { header: 'Gastos', key: 'expenses', width: 125, align: 'right' },
+                        { header: 'Parcelamentos', key: 'installments', width: 125, align: 'right' },
+                        { header: 'Saldo', key: 'balance', width: 135, align: 'right' }
+                    ], [{
+                        income: formatCurrency(monthlyIncome),
+                        expenses: formatCurrency(monthlyExpenses),
+                        installments: formatCurrency(monthlyInstallments),
+                        balance: formatCurrency(balance)
+                    }]);
+                    doc.moveDown(1);
+                    hasBodyContent = true;
+                }
 
                 // Income transactions
                 const incomeTx = monthlyTransactions.filter(t => t.type === 'income');
                 if (selectedSections.has('income') && incomeTx.length > 0) {
-                    doc.addPage();
+                    if (hasBodyContent) doc.addPage();
+                    hasBodyContent = true;
                     addSectionTitle(doc, 'Receitas', 'Cada linha representa uma transação reconhecida no período.');
                     drawTable(doc, [
                         { header: 'Data', key: 'date', width: 70 },
@@ -237,7 +251,8 @@ export class ReportService {
                 // Expense transactions
                 const expenseTx = monthlyTransactions.filter(t => t.type === 'expense');
                 if (selectedSections.has('expenses') && expenseTx.length > 0) {
-                    doc.addPage();
+                    if (hasBodyContent) doc.addPage();
+                    hasBodyContent = true;
                     addSectionTitle(doc, 'Gastos', 'Cada linha representa uma transação reconhecida no período.');
                     drawTable(doc, [
                         { header: 'Data', key: 'date', width: 70 },
@@ -255,27 +270,34 @@ export class ReportService {
 
                 // Installments
                 if (selectedSections.has('installments') && monthlyInstallmentEntries.length > 0) {
-                    doc.addPage();
-                    addSectionTitle(doc, 'Parcelamentos', 'Somente parcelas do mês selecionado.');
+                    if (hasBodyContent) doc.addPage();
+                    hasBodyContent = true;
+                    addSectionTitle(doc, 'Parcelamentos', 'Lista das parcelas do mês selecionado.');
                     drawTable(doc, [
-                        { header: 'Descrição', key: 'description', width: 210 },
-                        { header: 'Parcela', key: 'installment', width: 70, align: 'center' },
-                        { header: 'Valor Parc.', key: 'installmentAmount', width: 90, align: 'right' },
-                        { header: 'Total', key: 'totalAmount', width: 80, align: 'right' },
-                        { header: 'Status', key: 'status', width: 60 }
+                        { header: 'Nome', key: 'name', width: 190 },
+                        { header: 'Data', key: 'date', width: 75 },
+                        { header: 'Valor', key: 'amount', width: 85, align: 'right' },
+                        { header: 'Status', key: 'status', width: 70 },
+                        { header: 'Parcela atual', key: 'installment', width: 90, align: 'center' }
                     ], monthlyInstallmentEntries.map(({ installment, entry }) => ({
-                        description: installment.description,
-                        installment: `${entry.index + 1}/${entry.totalInstallments}`,
-                        installmentAmount: formatCurrency(entry.amount),
-                        totalAmount: formatCurrency(entry.amount * entry.totalInstallments),
-                        status: entry.isPaid ? 'Pago' : 'Pendente'
+                        name: installment.description,
+                        date: formatDateObject(getInstallmentDateAt(installment, entry.index)),
+                        amount: formatCurrency(entry.amount),
+                        status: entry.isPaid ? 'Pago' : 'Não pago',
+                        installment: `${entry.index + 1} de ${entry.totalInstallments}`
                     })));
-                    addTotal(doc, 'Total pendente em parcelamentos', monthlyInstallments);
+                    addTotal(doc, 'Total de parcelas não pagas no mês', monthlyInstallments);
+                } else if (onlyInstallmentsSelected) {
+                    addSectionTitle(doc, 'Parcelamentos', 'Lista das parcelas do mês selecionado.');
+                    doc.font('Helvetica').fontSize(10).fillColor('#6b7280')
+                        .text('Nenhum parcelamento encontrado para o mês selecionado.');
+                    hasBodyContent = true;
                 }
 
                 // Credit Cards
                 if (selectedSections.has('cards') && creditCards.length > 0) {
-                    doc.addPage();
+                    if (hasBodyContent) doc.addPage();
+                    hasBodyContent = true;
                     addSectionTitle(doc, 'Cartões de Crédito');
                     drawTable(doc, [
                         { header: 'Nome', key: 'name', width: 145 },
@@ -298,7 +320,8 @@ export class ReportService {
                 // Card purchases
                 const cardPurchases = monthlyTransactions.filter(t => t.type === 'expense' && (t.payment_method === 'credito' || t.credit_card_id));
                 if (selectedSections.has('purchases') && cardPurchases.length > 0) {
-                    doc.addPage();
+                    if (hasBodyContent) doc.addPage();
+                    hasBodyContent = true;
                     addSectionTitle(doc, 'Compras no Cartão');
                     drawTable(doc, [
                         { header: 'Data', key: 'date', width: 70 },
@@ -317,7 +340,8 @@ export class ReportService {
 
                 // Budgets
                 if (selectedSections.has('budgets') && budgets.length > 0) {
-                    doc.addPage();
+                    if (hasBodyContent) doc.addPage();
+                    hasBodyContent = true;
                     addSectionTitle(doc, 'Orçamentos');
                     drawTable(doc, [
                         { header: 'Categoria', key: 'category', width: 210 },
@@ -334,7 +358,8 @@ export class ReportService {
 
                 // Shopping List
                 if (selectedSections.has('shopping') && shoppingItems.length > 0) {
-                    doc.addPage();
+                    if (hasBodyContent) doc.addPage();
+                    hasBodyContent = true;
                     addSectionTitle(doc, 'Lista de Compras');
                     drawTable(doc, [
                         { header: 'Item', key: 'item', width: 300 },
@@ -349,7 +374,8 @@ export class ReportService {
 
                 // Financial Goals
                 if (selectedSections.has('goals') && goals.length > 0) {
-                    doc.addPage();
+                    if (hasBodyContent) doc.addPage();
+                    hasBodyContent = true;
                     addSectionTitle(doc, 'Metas Financeiras');
                     drawTable(doc, [
                         { header: 'Meta', key: 'name', width: 220 },

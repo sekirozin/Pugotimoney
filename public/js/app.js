@@ -1913,7 +1913,7 @@ class FinanceApp {
 
         sortedEntries.forEach(({ inst, entry }) => {
             const totalInstallments = inst.totalInstallments || inst.total_installments || 0;
-            const currentInstallment = inst.currentInstallment ?? inst.current_installment ?? 0;
+            const currentInstallment = Number(inst.currentInstallment ?? inst.current_installment ?? 0);
             const paidInstallments = Math.max(0, Math.min(currentInstallment, totalInstallments));
             const remaining = Math.max(totalInstallments - paidInstallments, 0);
             const progress = totalInstallments > 0 ? (paidInstallments / totalInstallments) * 100 : 0;
@@ -1921,14 +1921,24 @@ class FinanceApp {
             const paidAmount = this.sumInstallmentAmounts(inst, 0, paidInstallments);
             const isCompleted = paidInstallments >= totalInstallments;
             const selectedIndex = entry.index;
-            const selectedIsPaid = entry.isPaid;
             const selectedMonthLabel = entry.monthLabel;
-            const displayIndex = this.installmentPreviewIndexes[inst.id] ?? selectedIndex;
+            const rawDisplayIndex = this.installmentPreviewIndexes[inst.id] ?? selectedIndex;
+            const displayIndex = Math.max(0, Math.min(Number(rawDisplayIndex), totalInstallments - 1));
             const displayAmount = this.getInstallmentAmountAt(inst, displayIndex);
             const displayMonthLabel = this.getInstallmentMonthLabel(inst, displayIndex);
             const displayIsPaid = displayIndex < paidInstallments;
-            const selectedStatusLabel = selectedIsPaid ? 'Parcela paga' : 'Valor do mês';
-            const selectedProgress = displayIsPaid ? 100 : progress;
+            const displayIsNextPayable = !isCompleted && displayIndex === paidInstallments;
+            const displayStatusLabel = displayIsPaid ? 'Parcela paga' : (displayIsNextPayable ? 'Valor a pagar' : 'Valor da parcela');
+            const displayProgress = displayIsPaid
+                ? Math.max(progress, totalInstallments > 0 ? ((displayIndex + 1) / totalInstallments) * 100 : 0)
+                : progress;
+            const paymentAction = displayIsPaid
+                ? '<span class="installment-paid-label"><i data-lucide="check-circle-2" class="lucide-icon"></i> Parcela paga</span>'
+                : displayIsNextPayable
+                    ? `<button class="btn installment-pay-button" onclick="markInstallmentPaid(${inst.id}, ${displayIndex})"><i data-lucide="check" class="lucide-icon"></i> Marcar Parcela como Paga</button>`
+                    : !isCompleted
+                        ? '<span class="installment-paid-label installment-waiting-label">Pague as parcelas anteriores primeiro</span>'
+                        : '';
             const isHidden = this.isInstallmentEntryHidden(inst, entry);
 
             // Mês de referência da próxima parcela
@@ -1968,7 +1978,7 @@ class FinanceApp {
                     </div>
                     <div class="installment-card-actions">
                         <div class="installment-focus">
-                            <div class="installment-focus-label">${selectedStatusLabel}</div>
+                            <div class="installment-focus-label">${displayStatusLabel}</div>
                             <div class="installment-focus-row">
                                 <button class="installment-preview-btn" onclick="app.changeInstallmentPreview(${inst.id}, -1)" ${displayIndex <= 0 ? 'disabled' : ''} aria-label="Parcela anterior">
                                     <i data-lucide="chevron-left" class="lucide-icon"></i>
@@ -1984,15 +1994,11 @@ class FinanceApp {
                 </div>
                 <div class="installment-progress-block">
                     <div class="installment-progress-track">
-                        <div class="installment-progress-fill ${displayIsPaid ? 'has-paid' : 'pending-month'}" style="width: ${selectedProgress}%;"></div>
+                        <div class="installment-progress-fill ${displayIsPaid ? 'has-paid' : 'pending-month'}" style="width: ${displayProgress}%;"></div>
                     </div>
                     <p>${displayIsPaid ? 'Parcela visualizada paga' : `${progress.toFixed(0)}% pago até o momento`}</p>
                 </div>
-                ${selectedIsPaid
-                    ? '<span class="installment-paid-label"><i data-lucide="check-circle-2" class="lucide-icon"></i> Parcela paga</span>'
-                    : !isCompleted
-                        ? `<button class="btn installment-pay-button" onclick="markInstallmentPaid(${inst.id})"><i data-lucide="check" class="lucide-icon"></i> Marcar Parcela como Paga</button>`
-                        : ''}
+                ${paymentAction}
             `;
             list.appendChild(item);
         });
@@ -2534,20 +2540,29 @@ function closeSubscriptionModal() {
     app.closeSubscriptionModal();
 }
 
-async function markInstallmentPaid(id) {
+async function markInstallmentPaid(id, targetIndex = null) {
     try {
+        const inst = app.installments.find(i => i.id == id);
+        const totalInstallments = Number(inst?.totalInstallments || inst?.total_installments || 0);
+        const previousCurrentInstallment = Math.max(0, Math.min(Number(inst?.currentInstallment ?? inst?.current_installment ?? 0), totalInstallments));
+        const normalizedTargetIndex = targetIndex === null || targetIndex === undefined ? previousCurrentInstallment : Number(targetIndex);
+
+        if (inst && Number.isFinite(normalizedTargetIndex) && normalizedTargetIndex !== previousCurrentInstallment) {
+            alert('Só é possível marcar como paga a próxima parcela pendente.');
+            return;
+        }
+
         const response = await fetch(`/api/installments/${id}/mark-paid`, { method: 'POST' });
         const data = await response.json();
         if (data.success) {
-            const inst = app.installments.find(i => i.id == id);
             if (inst) {
-                const previousCurrentInstallment = inst.currentInstallment ?? inst.current_installment ?? 0;
-                const currentInstallment = data.data?.currentInstallment ?? ((inst.currentInstallment ?? inst.current_installment ?? 0) + 1);
+                const currentInstallment = Number(data.data?.currentInstallment ?? (previousCurrentInstallment + 1));
                 inst.currentInstallment = currentInstallment;
                 inst.current_installment = currentInstallment;
-                app.installmentPreviewIndexes[id] = Math.max(0, previousCurrentInstallment);
+                app.installmentPreviewIndexes[id] = Math.max(0, Math.min(normalizedTargetIndex, totalInstallments - 1));
             }
             app.loadInstallments();
+            app.updateDashboard();
         } else {
             alert(data.error || 'Erro ao marcar parcela como paga');
         }
