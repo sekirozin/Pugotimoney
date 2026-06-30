@@ -280,7 +280,9 @@ header h1 {
 .profile-menu-item {
     padding: 9px 14px;
     cursor: pointer;
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 9px;
     font-size: 15px;
     color: var(--text);
     transition: background 0.2s;
@@ -293,6 +295,11 @@ header h1 {
 .profile-menu-item:last-child {
     border-top: 1px solid var(--border);
     color: #fecaca;
+}
+
+.profile-menu-item:last-child .lucide-icon {
+    width: 18px;
+    height: 18px;
 }
 
 .app-layout {
@@ -1812,25 +1819,103 @@ body.sidebar-expanded .nav-btn span {
     gap: 12px;
 }
 
+.report-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 10px;
+}
+
+.report-section-header > div:first-child {
+    display: grid;
+    gap: 3px;
+}
+
+.report-section-header span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.report-selection-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
 .report-section-options {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     gap: 10px;
-    margin: 10px 0 18px;
+    margin: 14px 0 18px;
 }
 
 .report-section-options label {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px;
+    gap: 12px;
+    min-height: 72px;
+    padding: 12px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 9px;
     background: var(--surface-soft);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
 }
 
 .report-section-options input {
-    width: auto;
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.report-section-options label:hover {
+    border-color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.report-section-options label:has(input:checked) {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 12%, var(--surface-soft));
+    box-shadow: inset 3px 0 var(--primary);
+}
+
+.report-option-icon {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--muted);
+}
+
+.report-section-options label:has(input:checked) .report-option-icon {
+    background: var(--primary);
+    color: #fff;
+}
+
+.report-section-options label > span:last-child {
+    display: grid;
+    gap: 3px;
+}
+
+.report-section-options strong { font-size: 13px; }
+.report-section-options small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
+.income-frequency-badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    margin-top: 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
+    color: var(--primary);
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 700;
 }
 
 body.dark-mode .card,
@@ -1851,6 +1936,13 @@ body.dark-mode .profile-menu {
 body.dark-mode .profile-section,
 body.dark-mode .report-section-options label {
     background: var(--surface-soft);
+}
+
+@media (max-width: 600px) {
+    .report-section-header { align-items: stretch; flex-direction: column; }
+    .report-selection-actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .report-selection-actions .btn-small { width: 100%; }
+    .report-section-options { grid-template-columns: 1fr; }
 }
 
 body.dark-mode .card h3,

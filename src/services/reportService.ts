@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { database } from '../models/database';
+import { getIncomeOccurrenceDate, incomeOccursInMonth, normalizeIncomeRecurrence } from '../utils/incomeRecurrence';
 
 export type ReportSection = 'installments' | 'expenses' | 'purchases' | 'shopping' | 'budgets' | 'income' | 'cards' | 'goals';
 
@@ -160,6 +161,7 @@ export class ReportService {
             try {
                 const selectedSections = new Set(sections.length > 0 ? sections : DEFAULT_SECTIONS);
                 const transactions = await database.getTransactions(undefined, userId);
+                const incomes = await database.getIncomes(userId);
                 const installments = await database.getInstallments(userId);
                 const creditCards = await database.getCreditCards(userId);
                 const budgets = await database.getBudgets(userId);
@@ -176,9 +178,13 @@ export class ReportService {
                     return dateStr >= startOfMonth && dateStr <= endOfMonth;
                 });
 
-                const monthlyIncome = monthlyTransactions
+                const monthlyIncomeTransactions = monthlyTransactions
                     .filter(t => t.type === 'income')
                     .reduce((sum, t) => sum + t.amount, 0);
+
+                const monthlyIncomeEntries = incomes.filter(income => incomeOccursInMonth(income, month, year));
+                const monthlyIncome = monthlyIncomeTransactions
+                    + monthlyIncomeEntries.reduce((sum, income) => sum + Number(income.amount || 0), 0);
 
                 const monthlyExpenses = monthlyTransactions
                     .filter(t => t.type === 'expense')
@@ -186,7 +192,13 @@ export class ReportService {
 
                 const monthlyInstallmentEntries = installments
                     .map(i => ({ installment: i, entry: getInstallmentEntryForMonth(i, month, year) }))
-                    .filter((item): item is { installment: any; entry: NonNullable<ReturnType<typeof getInstallmentEntryForMonth>> } => Boolean(item.entry));
+                    .filter((item): item is { installment: any; entry: NonNullable<ReturnType<typeof getInstallmentEntryForMonth>> } => Boolean(item.entry))
+                    .sort((a, b) => {
+                        const aRemaining = a.entry.totalInstallments - a.entry.index - 1;
+                        const bRemaining = b.entry.totalInstallments - b.entry.index - 1;
+                        return aRemaining - bRemaining
+                            || a.installment.description.localeCompare(b.installment.description, 'pt-BR');
+                    });
 
                 const monthlyInstallments = monthlyInstallmentEntries
                     .filter(({ entry }) => !entry.isPaid)
@@ -230,7 +242,21 @@ export class ReportService {
 
                 // Income transactions
                 const incomeTx = monthlyTransactions.filter(t => t.type === 'income');
-                if (selectedSections.has('income') && incomeTx.length > 0) {
+                const reportIncomeRows = [
+                    ...incomeTx.map(t => ({
+                        date: formatDate(t.date),
+                        description: t.description,
+                        category: t.category,
+                        amount: formatCurrency(t.amount)
+                    })),
+                    ...monthlyIncomeEntries.map(income => ({
+                        date: formatDateObject(getIncomeOccurrenceDate(income, month, year)),
+                        description: income.description,
+                        category: `${income.category} · ${{ specific: 'Data específica', monthly: 'Mensal', yearly: 'Anual' }[normalizeIncomeRecurrence(income.recurrence)]}`,
+                        amount: formatCurrency(income.amount)
+                    }))
+                ].sort((a, b) => a.date.localeCompare(b.date));
+                if (selectedSections.has('income') && reportIncomeRows.length > 0) {
                     if (hasBodyContent) doc.addPage();
                     hasBodyContent = true;
                     addSectionTitle(doc, 'Receitas', 'Cada linha representa uma transação reconhecida no período.');
@@ -239,12 +265,7 @@ export class ReportService {
                         { header: 'Descrição', key: 'description', width: 245 },
                         { header: 'Categoria', key: 'category', width: 105 },
                         { header: 'Valor', key: 'amount', width: 90, align: 'right' }
-                    ], incomeTx.map(t => ({
-                        date: formatDate(t.date),
-                        description: t.description,
-                        category: t.category,
-                        amount: formatCurrency(t.amount)
-                    })));
+                    ], reportIncomeRows);
                     addTotal(doc, 'Total Receitas', monthlyIncome);
                 }
 

@@ -64,6 +64,24 @@ function closeMobileMenu() {
     }
 }
 
+function closeSidebarFromOutside(target) {
+    const element = target instanceof Element ? target : null;
+    const sidebar = document.getElementById('sidebar-nav');
+    const button = document.getElementById('mobile-menu-button');
+    if (element?.closest('#sidebar-nav, #mobile-menu-button')) return;
+
+    const desktopExpanded = document.body.classList.contains('sidebar-expanded');
+    const mobileOpen = sidebar?.classList.contains('open');
+    if (!desktopExpanded && !mobileOpen) return;
+
+    document.body.classList.remove('sidebar-expanded');
+    sidebar?.classList.remove('open');
+    document.getElementById('mobile-menu-backdrop')?.classList.remove('open');
+    button?.setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('click', (event) => closeSidebarFromOutside(event.target));
+
 applyTheme('dark');
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -403,6 +421,8 @@ class FinanceApp {
         this.setupEventListeners();
         this.populateYearDropdown();
         this.setDefaultMonthYear();
+        updateIncomeDateLabel();
+        updateReportSelectionState();
         await this.loadInitialData();
         this.initCharts();
         this.updateDashboard();
@@ -518,6 +538,7 @@ class FinanceApp {
         });
         addListener('subscription-form', 'submit', (e) => { e.preventDefault(); this.addSubscription(); });
         addListener('income-form', 'submit', (e) => { e.preventDefault(); this.addIncome(); });
+        addListener('income-recurrence', 'change', updateIncomeDateLabel);
 
         addListener('filter-type', 'change', () => { this.filterTransactions(); });
         addListener('filter-category', 'change', () => { this.filterTransactions(); });
@@ -689,10 +710,7 @@ class FinanceApp {
         const monthlyIncome = this.calculateMonthlyTotal('income', this.selectedMonth, this.selectedYear);
         const monthlyExpenses = this.calculateMonthlyTotal('expense', this.selectedMonth, this.selectedYear);
         const totalIncomes = this.incomes
-            .filter(inc => {
-                const d = new Date((inc.date || '').split('T')[0]);
-                return d.getMonth() === this.selectedMonth && d.getFullYear() === this.selectedYear;
-            })
+            .filter(inc => this.incomeOccursInMonth(inc, this.selectedMonth, this.selectedYear))
             .reduce((sum, inc) => sum + inc.amount, 0);
         const totalIncome = monthlyIncome + totalIncomes;
         const periodNet = totalIncome - monthlyExpenses;
@@ -704,6 +722,25 @@ class FinanceApp {
         this.updateDashboardCommitments();
         this.updateCharts();
         this.refreshIcons();
+    }
+
+    incomeOccursInMonth(income, month, year) {
+        const [startYear, startMonth] = String(income?.date || '')
+            .split('T')[0]
+            .split('-')
+            .map(Number);
+        if (!startYear || !startMonth) return false;
+
+        const targetKey = year * 12 + month;
+        const startKey = startYear * 12 + (startMonth - 1);
+        if (targetKey < startKey) return false;
+
+        const recurrence = ['monthly', 'yearly'].includes(income.recurrence)
+            ? income.recurrence
+            : 'specific';
+        if (recurrence === 'monthly') return true;
+        if (recurrence === 'yearly') return startMonth - 1 === month;
+        return startYear === year && startMonth - 1 === month;
     }
 
     updateDashboardCommitments() {
@@ -2351,6 +2388,14 @@ class FinanceApp {
 
         this.incomes.forEach(inc => {
             const dateStr = (inc.date || '').split('T')[0];
+            const recurrence = inc.recurrence === 'monthly' || inc.recurrence === 'yearly'
+                ? inc.recurrence
+                : 'specific';
+            const recurrenceLabels = {
+                specific: 'Data específica',
+                monthly: 'Mensal',
+                yearly: 'Anual'
+            };
             const item = document.createElement('div');
             item.className = 'card';
             item.style.marginBottom = '15px';
@@ -2360,7 +2405,8 @@ class FinanceApp {
                         <h3>${esc(inc.description)}</h3>
                         <p><strong>Categoria:</strong> ${esc(inc.category)}</p>
                         <p><strong>Valor:</strong> R$ ${inc.amount.toFixed(2)}</p>
-                        <p><strong>Data:</strong> ${dateStr}</p>
+                        <p><strong>${recurrence === 'specific' ? 'Data' : 'Início'}:</strong> ${dateStr}</p>
+                        <span class="income-frequency-badge">${recurrenceLabels[recurrence]}</span>
                     </div>
                     <div style="text-align: right;">
                         <div style="margin-top: 8px;">
@@ -2380,9 +2426,10 @@ class FinanceApp {
         const amount = parseFloat(document.getElementById('income-amount').value);
         const category = document.getElementById('income-category').value;
         const date = document.getElementById('income-date').value;
+        const recurrence = document.getElementById('income-recurrence').value;
         const editId = document.getElementById('income-modal').dataset.editId;
 
-        const income = { description, amount, category, date };
+        const income = { description, amount, category, date, recurrence };
 
         try {
             let response;
@@ -2418,12 +2465,25 @@ class FinanceApp {
     }
 
     openIncomeModal() {
+        const modal = document.getElementById('income-modal');
+        if (!modal.dataset.editId) {
+            document.getElementById('income-recurrence').value = 'specific';
+            const dateInput = document.getElementById('income-date');
+            if (!dateInput.value) {
+                const now = new Date();
+                const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+                dateInput.value = localDate.toISOString().slice(0, 10);
+            }
+        }
+        updateIncomeDateLabel();
         document.getElementById('income-modal').style.display = 'block';
     }
 
     closeIncomeModal() {
         document.getElementById('income-modal').style.display = 'none';
         document.getElementById('income-form').reset();
+        document.getElementById('income-recurrence').value = 'specific';
+        updateIncomeDateLabel();
         delete document.getElementById('income-modal').dataset.editId;
         document.getElementById('income-modal').querySelector('h2').textContent = 'Nova Receita';
     }
@@ -2476,8 +2536,12 @@ function editIncome(id) {
     document.getElementById('income-amount').value = inc.amount;
     document.getElementById('income-category').value = inc.category;
     document.getElementById('income-date').value = (inc.date || '').split('T')[0];
+    document.getElementById('income-recurrence').value = ['monthly', 'yearly'].includes(inc.recurrence)
+        ? inc.recurrence
+        : 'specific';
     document.getElementById('income-modal').dataset.editId = id;
     document.getElementById('income-modal').querySelector('h2').textContent = 'Editar Receita';
+    updateIncomeDateLabel();
     openIncomeModal();
 }
 
@@ -2879,6 +2943,30 @@ async function downloadStatement() {
         console.error('Erro ao baixar extrato:', error);
         alert('Erro ao gerar extrato PDF');
     }
+}
+
+function updateIncomeDateLabel() {
+    const recurrence = document.getElementById('income-recurrence')?.value || 'specific';
+    const label = document.getElementById('income-date-label');
+    if (label) label.textContent = recurrence === 'specific' ? 'Data:' : 'Início da recorrência:';
+}
+
+function updateReportSelectionState() {
+    const checkboxes = Array.from(document.querySelectorAll('input[name="report-section"]'));
+    const selected = checkboxes.filter(input => input.checked).length;
+    const status = document.getElementById('report-selection-status');
+    if (status) {
+        status.textContent = selected === 0
+            ? 'Nenhuma seção selecionada'
+            : `${selected} de ${checkboxes.length} seções selecionadas`;
+    }
+}
+
+function setAllReportSections(checked) {
+    document.querySelectorAll('input[name="report-section"]').forEach(input => {
+        input.checked = checked;
+    });
+    updateReportSelectionState();
 }
 
 async function downloadSelectedReport() {

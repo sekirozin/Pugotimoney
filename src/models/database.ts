@@ -95,6 +95,7 @@ export class Database {
                         amount REAL NOT NULL,
                         category TEXT NOT NULL,
                         date TEXT NOT NULL,
+                        recurrence TEXT NOT NULL DEFAULT 'specific',
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     );
                     
@@ -149,7 +150,8 @@ export class Database {
             "ALTER TABLE installments ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE installments ADD COLUMN installment_amounts TEXT",
             "ALTER TABLE financial_goals ADD COLUMN user_id INTEGER REFERENCES users(id)",
-            "ALTER TABLE incomes ADD COLUMN user_id INTEGER REFERENCES users(id)"
+            "ALTER TABLE incomes ADD COLUMN user_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE incomes ADD COLUMN recurrence TEXT NOT NULL DEFAULT 'specific'"
         ];
         for (const sql of migrations) {
             try { await this.run(sql); } catch (e) { /* coluna já existe */ }
@@ -320,14 +322,15 @@ export class Database {
     async addIncome(income: any, userId?: number): Promise<number> {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
-                INSERT INTO incomes (description, amount, category, date, user_id)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO incomes (description, amount, category, date, recurrence, user_id)
+                VALUES (?, ?, ?, ?, ?, ?)
             `);
             stmt.run(
                 income.description,
                 income.amount,
                 income.category,
                 income.date,
+                income.recurrence || 'specific',
                 userId || income.user_id || null,
                 function(this: any, err: Error | null) {
                     if (err) {
@@ -355,7 +358,8 @@ export class Database {
                         description: row.description,
                         amount: row.amount,
                         category: row.category,
-                        date: row.date
+                        date: row.date,
+                        recurrence: row.recurrence || 'specific'
                     })));
                 }
             });
@@ -366,7 +370,7 @@ export class Database {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
                 UPDATE incomes
-                SET description = ?, amount = ?, category = ?, date = ?
+                SET description = ?, amount = ?, category = ?, date = ?, recurrence = ?
                 WHERE id = ?${userId !== undefined ? ' AND user_id = ?' : ''}
             `);
             stmt.run(
@@ -374,6 +378,7 @@ export class Database {
                 updates.amount,
                 updates.category,
                 updates.date,
+                updates.recurrence || 'specific',
                 id,
                 ...(userId !== undefined ? [userId] : []),
                 function(this: any, err: Error | null) {

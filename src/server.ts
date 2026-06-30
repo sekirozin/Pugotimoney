@@ -17,6 +17,7 @@ import goalRoutes from './routes/goals';
 import categoryRoutes from './routes/categories';
 import dashboardRoutes from './routes/dashboard';
 import incomeRoutes from './routes/incomes';
+import { incomeOccursInMonth } from './utils/incomeRecurrence';
 import profileRoutes from './routes/profile';
 import authRoutes from './routes/auth';
 import { AuthRequest, authMiddleware, adminMiddleware } from './middleware/auth';
@@ -150,6 +151,7 @@ app.get('/api/reports/monthly', authMiddleware, async (req: AuthRequest, res) =>
         const { month, year } = req.query;
         
         const transactions = await database.getTransactions(undefined, req.user!.id);
+        const incomes = await database.getIncomes(req.user!.id);
         const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1;
         const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
         
@@ -160,7 +162,10 @@ app.get('/api/reports/monthly', authMiddleware, async (req: AuthRequest, res) =>
 
         const income = monthlyTransactions
             .filter(t => t.type === 'income')
-            .reduce((sum, t) => sum + t.amount, 0);
+            .reduce((sum, t) => sum + t.amount, 0)
+            + incomes
+                .filter(item => incomeOccursInMonth(item, targetMonth, targetYear))
+                .reduce((sum, item) => sum + Number(item.amount || 0), 0);
         const expenses = monthlyTransactions
             .filter(t => t.type === 'expense')
             .reduce((sum, t) => sum + t.amount, 0);

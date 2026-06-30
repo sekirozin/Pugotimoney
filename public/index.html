@@ -3,7 +3,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pugotimoney</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260619-1">
-    <link rel="stylesheet" href="css/style.css?v=installment-paid-preview-20260625">
+    <link rel="stylesheet" href="css/style.css?v=sidebar-outside-20260630">
     <script src="js/lucide.min.js"></script>
     <script src="js/chart.umd.min.js"></script>
 </head>
@@ -79,7 +79,8 @@
                             Perfil
                         </div>
                         <div class="profile-menu-item" onclick="logout()">
-                            Logout
+                            <i data-lucide="log-out" class="lucide-icon" aria-hidden="true"></i>
+                            <span>Sair</span>
                         </div>
                     </div>
                 </div>
@@ -407,15 +408,25 @@
                         <select id="report-year"></select>
                     </div>
                 </div>
+                <div class="report-section-header">
+                    <div>
+                        <strong>Conteúdo do relatório</strong>
+                        <span id="report-selection-status">Nenhuma seção selecionada</span>
+                    </div>
+                    <div class="report-selection-actions">
+                        <button type="button" class="btn-small" onclick="setAllReportSections(true)">Selecionar todos</button>
+                        <button type="button" class="btn-small" onclick="setAllReportSections(false)">Limpar</button>
+                    </div>
+                </div>
                 <div class="report-section-options">
-                    <label><input type="checkbox" name="report-section" value="installments" checked=""> Parcelamentos</label>
-                    <label><input type="checkbox" name="report-section" value="expenses" checked=""> Gastos</label>
-                    <label><input type="checkbox" name="report-section" value="purchases" checked=""> Compras</label>
-                    <label><input type="checkbox" name="report-section" value="shopping" checked=""> Lista de compras</label>
-                    <label><input type="checkbox" name="report-section" value="budgets" checked=""> Orçamentos</label>
-                    <label><input type="checkbox" name="report-section" value="income"> Receitas</label>
-                    <label><input type="checkbox" name="report-section" value="cards"> Cartões</label>
-                    <label><input type="checkbox" name="report-section" value="goals"> Metas</label>
+                    <label><input type="checkbox" name="report-section" value="installments" onchange="updateReportSelectionState()"><span class="report-option-icon"><i data-lucide="list-ordered" class="lucide-icon"></i></span><span><strong>Parcelamentos</strong><small>Parcelas e status do mês</small></span></label>
+                    <label><input type="checkbox" name="report-section" value="expenses" onchange="updateReportSelectionState()"><span class="report-option-icon"><i data-lucide="receipt" class="lucide-icon"></i></span><span><strong>Gastos</strong><small>Despesas registradas</small></span></label>
+                    <label><input type="checkbox" name="report-section" value="purchases" onchange="updateReportSelectionState()"><span class="report-option-icon"><i data-lucide="credit-card" class="lucide-icon"></i></span><span><strong>Compras</strong><small>Compras realizadas no cartão</small></span></label>
+                    <label><input type="checkbox" name="report-section" value="shopping" onchange="updateReportSelectionState()"><span class="report-option-icon"><i data-lucide="shopping-cart" class="lucide-icon"></i></span><span><strong>Lista de compras</strong><small>Itens planejados e comprados</small></span></label>
+                    <label><input type="checkbox" name="report-section" value="budgets" onchange="updateReportSelectionState()"><span class="report-option-icon"><i data-lucide="wallet-cards" class="lucide-icon"></i></span><span><strong>Orçamentos</strong><small>Limites por categoria</small></span></label>
+                    <label><input type="checkbox" name="report-section" value="income" onchange="updateReportSelectionState()"><span class="report-option-icon"><i data-lucide="trending-up" class="lucide-icon"></i></span><span><strong>Receitas</strong><small>Receitas específicas e recorrentes</small></span></label>
+                    <label><input type="checkbox" name="report-section" value="cards" onchange="updateReportSelectionState()"><span class="report-option-icon"><i data-lucide="badge-dollar-sign" class="lucide-icon"></i></span><span><strong>Cartões</strong><small>Limites e saldo disponível</small></span></label>
+                    <label><input type="checkbox" name="report-section" value="goals" onchange="updateReportSelectionState()"><span class="report-option-icon"><i data-lucide="target" class="lucide-icon"></i></span><span><strong>Metas</strong><small>Progresso das metas financeiras</small></span></label>
                 </div>
                 <button class="btn" onclick="downloadSelectedReport()">
                     <i data-lucide="file-down" class="lucide-icon"></i> Baixar relatório PDF
@@ -738,7 +749,15 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="income-date">Data:</label>
+                    <label for="income-recurrence">Frequência:</label>
+                    <select id="income-recurrence">
+                        <option value="specific">Data específica</option>
+                        <option value="monthly">Mensal</option>
+                        <option value="yearly">Anual</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="income-date" id="income-date-label">Data:</label>
                     <input type="date" id="income-date" required="">
                 </div>
                 <button type="submit" class="btn">Salvar Receita</button>
@@ -827,7 +846,7 @@
 
     </div><!-- fim app-content -->
 
-    <script src="js/app.js?v=installment-paid-preview-20260625"></script>
+    <script src="js/app.js?v=sidebar-outside-20260630"></script>
 
 
 </body></html>

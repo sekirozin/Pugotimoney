@@ -68,6 +68,16 @@ export interface FinancialGoal {
     created_at: string;
 }
 
+export interface Income {
+    id: number;
+    description: string;
+    amount: number;
+    category: string;
+    date: string;
+    recurrence: 'specific' | 'monthly' | 'yearly';
+    created_at: string;
+}
+
 export interface Category {
     id: number;
     name: string;
