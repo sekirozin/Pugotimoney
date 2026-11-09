@@ -1,12 +1,14 @@
 {
   "name": "finance-system",
   "version": "1.0.0",
-  "description": "Sistema de controle de finanças pessoais",
+  "description": "Sistema de controle de finan\u00e7as pessoais",
   "main": "dist/server.js",
   "scripts": {
     "dev": "npm run dev:server",
     "dev:server": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.cjs",
     "start": "node dist/server.js",
     "setup": "npm install && npm run build"
   },

@@ -1,3 +1,4 @@
+import { civilDate, recurrenceTypes, todayCivil } from './calendar';
 import { Transaction, ShoppingItem, CreditCard, Budget, FinancialGoal } from '../models/types';
 
 export const CATEGORIES = {
@@ -36,7 +37,7 @@ export function formatCurrency(value: number): string {
 }
 
 export function formatDate(date: string | Date): string {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    const dateObj = typeof date === 'string' ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(date) ? date + 'T12:00:00' : date) : date;
     return dateObj.toLocaleDateString('pt-BR');
 }
 
@@ -170,28 +171,23 @@ export function validateTransaction(transaction: Partial<Transaction>): { isVali
         errors.push('Tipo de transação inválido');
     }
 
-    if (!transaction.amount || transaction.amount <= 0) {
+    if (typeof transaction.amount !== 'number' || !Number.isFinite(transaction.amount) || transaction.amount <= 0 || !Number.isSafeInteger(Math.round(transaction.amount * 100))) {
         errors.push('Valor deve ser maior que zero');
     }
 
-    if (!transaction.category) {
+    if (typeof transaction.category !== 'string' || !transaction.category.trim()) {
         errors.push('Categoria é obrigatória');
     }
 
-    if (!transaction.description || transaction.description.trim().length === 0) {
+    if (typeof transaction.description !== 'string' || !transaction.description.trim()) {
         errors.push('Descrição é obrigatória');
     }
 
-    if (!transaction.date) {
-        errors.push('Data é obrigatória');
-    } else {
-        const transactionDate = new Date(transaction.date);
-        const today = new Date();
-        
-        if (transactionDate > today) {
-            errors.push('Data da transação não pode ser futura');
-        }
-    }
+    const date = civilDate(transaction.date);
+    if (!date) errors.push('Data inválida');
+    else if (date > todayCivil()) errors.push('Data da transação não pode ser futura');
+    if (transaction.recurrence && !recurrenceTypes.includes(transaction.recurrence)) errors.push('Recorrência inválida');
+    if (transaction.recurrence_end_date && (!civilDate(transaction.recurrence_end_date) || (date && transaction.recurrence_end_date.slice(0, 10) < date))) errors.push('Término da recorrência inválido');
 
     return {
         isValid: errors.length === 0,

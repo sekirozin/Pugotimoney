@@ -18,6 +18,9 @@ router.get('/total', shoppingController.getTotalEstimated);
 // POST /api/shopping-list - Adicionar novo item à lista de compras
 router.post('/', shoppingController.addShoppingItem);
 
+// PATCH /api/shopping-list/reorder - Salvar prioridades definidas por arraste
+router.patch('/reorder', shoppingController.reorderShoppingItems);
+
 // PUT /api/shopping-list/:id - Atualizar item da lista de compras
 router.put('/:id', shoppingController.updateShoppingItem);
 

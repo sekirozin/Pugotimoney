@@ -1,6 +1,12 @@
+import { finance } from './financeService';
 import PDFDocument from 'pdfkit';
 import { database } from '../models/database';
 import { getIncomeOccurrenceDate, incomeOccursInMonth, normalizeIncomeRecurrence } from '../utils/incomeRecurrence';
+
+import type { DespesasDoMes, ReceitasDoMes } from './pluggyRegras';
+
+/** Receitas e despesas reais das contas conectadas: substituem as manuais no resumo e nas seções Receitas e Gastos. */
+export type RealStatement = { receitas: ReceitasDoMes; despesas: DespesasDoMes };
 
 export type ReportSection = 'installments' | 'expenses' | 'purchases' | 'shopping' | 'budgets' | 'income' | 'cards' | 'goals';
 
@@ -156,12 +162,13 @@ function addTotal(doc: PdfDoc, label: string, value: number) {
 }
 
 export class ReportService {
-    static async generateMonthlyStatement(year: number, month: number, sections: ReportSection[] = DEFAULT_SECTIONS, userId?: number): Promise<Buffer> {
+    static async generateMonthlyStatement(year: number, month: number, sections: ReportSection[] = DEFAULT_SECTIONS, userId?: number, real?: RealStatement): Promise<Buffer> {
         return new Promise(async (resolve, reject) => {
             try {
                 const selectedSections = new Set(sections.length > 0 ? sections : DEFAULT_SECTIONS);
                 const transactions = await database.getTransactions(undefined, userId);
                 const incomes = await database.getIncomes(userId);
+                const expenses = await database.getExpenses(userId);
                 const installments = await database.getInstallments(userId);
                 const creditCards = await database.getCreditCards(userId);
                 const budgets = await database.getBudgets(userId);
@@ -183,12 +190,9 @@ export class ReportService {
                     .reduce((sum, t) => sum + t.amount, 0);
 
                 const monthlyIncomeEntries = incomes.filter(income => incomeOccursInMonth(income, month, year));
-                const monthlyIncome = monthlyIncomeTransactions
-                    + monthlyIncomeEntries.reduce((sum, income) => sum + Number(income.amount || 0), 0);
-
-                const monthlyExpenses = monthlyTransactions
-                    .filter(t => t.type === 'expense')
-                    .reduce((sum, t) => sum + t.amount, 0);
+                const totals = finance.summary({transactions,incomes,expenses},year,month);
+                const monthlyIncome = real ? real.receitas.total : totals.income;
+                const monthlyExpenses = real ? real.despesas.total : totals.expenses;
 
                 const monthlyInstallmentEntries = installments
                     .map(i => ({ installment: i, entry: getInstallmentEntryForMonth(i, month, year) }))
@@ -219,7 +223,7 @@ export class ReportService {
                 doc.fontSize(11).font('Helvetica').fillColor('#d1d5db').text(`${monthNames[month - 1]} de ${year}`, 42, 56);
                 doc.y = 116;
 
-                const balance = monthlyIncome - monthlyExpenses - monthlyInstallments;
+                const balance = real ? finance.sum([monthlyIncome, -monthlyExpenses]) : totals.balance;
                 const onlyInstallmentsSelected = selectedSections.size === 1 && selectedSections.has('installments');
                 let hasBodyContent = false;
 
@@ -256,10 +260,17 @@ export class ReportService {
                         amount: formatCurrency(income.amount)
                     }))
                 ].sort((a, b) => a.date.localeCompare(b.date));
+                const linhaReal = (item: { data: string; descricao: string; categoria: string | null; valor: number; contraparte: string | null }, parte: string) => ({
+                    date: formatDate(item.data),
+                    description: item.contraparte ? `${item.descricao} · ${parte}: ${item.contraparte}` : item.descricao,
+                    category: finance.pluggyCategory(item.categoria),
+                    amount: formatCurrency(item.valor)
+                });
+                if (real) reportIncomeRows.splice(0, reportIncomeRows.length, ...real.receitas.lancamentos.map(item => linhaReal(item, 'De')).sort((a, b) => a.date.localeCompare(b.date)));
                 if (selectedSections.has('income') && reportIncomeRows.length > 0) {
                     if (hasBodyContent) doc.addPage();
                     hasBodyContent = true;
-                    addSectionTitle(doc, 'Receitas', 'Cada linha representa uma transação reconhecida no período.');
+                    addSectionTitle(doc, 'Receitas', real ? 'Entradas nas contas conectadas, sem transferências entre suas contas.' : 'Cada linha representa uma transação reconhecida no período.');
                     drawTable(doc, [
                         { header: 'Data', key: 'date', width: 70 },
                         { header: 'Descrição', key: 'description', width: 245 },
@@ -270,22 +281,20 @@ export class ReportService {
                 }
 
                 // Expense transactions
-                const expenseTx = monthlyTransactions.filter(t => t.type === 'expense');
-                if (selectedSections.has('expenses') && expenseTx.length > 0) {
+                const expenseTx = totals.entries.filter(t => t.type === 'expense');
+                const expenseRows = real
+                    ? real.despesas.lancamentos.map(item => linhaReal(item, 'Para')).sort((a, b) => a.date.localeCompare(b.date))
+                    : expenseTx.map(t => ({ date: formatDate(t.date), description: t.description, category: t.category, amount: formatCurrency(t.amount) }));
+                if (selectedSections.has('expenses') && expenseRows.length > 0) {
                     if (hasBodyContent) doc.addPage();
                     hasBodyContent = true;
-                    addSectionTitle(doc, 'Gastos', 'Cada linha representa uma transação reconhecida no período.');
+                    addSectionTitle(doc, 'Gastos', real ? 'Saídas das contas e compras no cartão, sem transferências entre suas contas, pagamento de fatura nem investimentos.' : 'Cada linha representa uma transação reconhecida no período.');
                     drawTable(doc, [
                         { header: 'Data', key: 'date', width: 70 },
                         { header: 'Descrição', key: 'description', width: 245 },
                         { header: 'Categoria', key: 'category', width: 105 },
                         { header: 'Valor', key: 'amount', width: 90, align: 'right' }
-                    ], expenseTx.map(t => ({
-                        date: formatDate(t.date),
-                        description: t.description,
-                        category: t.category,
-                        amount: formatCurrency(t.amount)
-                    })));
+                    ], expenseRows);
                     addTotal(doc, 'Total Gastos', monthlyExpenses);
                 }
 
@@ -369,7 +378,7 @@ export class ReportService {
                         { header: 'Orçado', key: 'amount', width: 100, align: 'right' },
                         { header: 'Gasto', key: 'spent', width: 100, align: 'right' },
                         { header: 'Restante', key: 'remaining', width: 100, align: 'right' }
-                    ], budgets.map(b => ({
+                    ], budgets.map(b => finance.budget({transactions,incomes,expenses},b,year,month)).map(b => ({
                         category: b.category,
                         amount: formatCurrency(b.amount),
                         spent: formatCurrency(b.spent),

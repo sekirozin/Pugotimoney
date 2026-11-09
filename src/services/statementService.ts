@@ -1,3 +1,4 @@
+import { civilDate } from '../utils/calendar';
 import multer from 'multer';
 import { PDFParse } from 'pdf-parse';
 import { database } from '../models/database';
@@ -54,12 +55,14 @@ function parseCSVLine(line: string): string[] {
     const result: string[] = [];
     let current = '';
     let inQuotes = false;
-    const delimiter = line.includes(';') && !line.includes(',') ? ';' : ',';
+    const outsideQuotes = line.replace(/"(?:[^"]|"")*"/g, '');
+    const delimiter = outsideQuotes.includes(';') ? ';' : ',';
     
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
         if (char === '"') {
-            inQuotes = !inQuotes;
+            if (inQuotes && line[i+1] === '"') { current += '"'; i++; }
+            else inQuotes = !inQuotes;
         } else if (char === delimiter && !inQuotes) {
             result.push(current.trim());
             current = '';
@@ -247,13 +250,13 @@ function cleanStatementDescription(value: string): string {
 function isPageNoise(line: string): boolean {
     return /^--\s*\d+\s+of\s+\d+\s*--$/i.test(line)
         || /^\d+\s+de\s+\d+/.test(line)
-        || /^\d{2}\/\d{2}\/\d{4}/.test(line)
+        || /^\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2})?$/.test(line)
         || looksLikeHeader(line);
 }
 
 function parseStatementLines(lines: string[]): any[] {
     if (lines.length < 2) {
-        console.error('[Import] Texto extraído insuficiente. Linhas:', lines);
+        console.error('[Import] Texto extraído insuficiente.');
         throw new Error('Extrato deve conter pelo menos 2 linhas. Verifique se o PDF tem texto selecionável (não imagem escaneada).');
     }
     
@@ -348,7 +351,7 @@ function parseStatementLines(lines: string[]): any[] {
 
         description = descriptionParts.join(' ').replace(/\s+/g, ' ').trim() || null;
         
-        if (date && description && amount !== null && amount !== 0) {
+        if (date && civilDate(date) && description && amount !== null && Number.isFinite(amount) && amount !== 0) {
             const type = inferTransactionType(amount, line);
             const absAmount = Math.abs(amount);
             const category = detectCategory(description);
@@ -409,8 +412,7 @@ async function extractStatementText(buffer: Buffer, mimeType?: string, filename?
     const name = filename?.toLowerCase() || '';
     if (mimeType === 'application/pdf' || name.endsWith('.pdf')) {
         const parser = new PDFParse({ data: buffer });
-        const parsed = await parser.getText();
-        await parser.destroy();
+        const parsed = await parser.getText().finally(() => parser.destroy());
         if (!parsed.text.trim()) {
             throw new Error('PDF não contém texto legível. Envie PDF com texto selecionável, não imagem escaneada.');
         }
@@ -433,13 +435,12 @@ function transactionKey(transaction: any): string {
     ].join('|');
 }
 
-export async function processStatement(buffer: Buffer, mimeType?: string, filename?: string, options: ProcessStatementOptions = {}): Promise<{ imported: number; skipped: number; transactions: any[]; recognized: number }> {
+async function processStatementUnlocked(buffer: Buffer, mimeType?: string, filename?: string, options: ProcessStatementOptions = {}): Promise<{ imported: number; skipped: number; transactions: any[]; recognized: number }> {
     const content = await extractStatementText(buffer, mimeType, filename);
     const lines = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 
     if (process.env.NODE_ENV === 'development') {
         console.log('[Import] Linhas extraídas:', lines.length);
-        console.log('[Import] Primeiras 10 linhas:', lines.slice(0, 10).join('\n'));
     }
 
     const transactions = parseStatementLines(lines).map(transaction => ({
@@ -455,7 +456,7 @@ export async function processStatement(buffer: Buffer, mimeType?: string, filena
     
     const existingTransactions = await database.getTransactions(undefined, options.userId);
     const existingKeys = new Set(existingTransactions.map(transactionKey));
-    const newTransactions = transactions.filter(transaction => !existingKeys.has(transactionKey(transaction)));
+    const newTransactions = transactions.filter(transaction => { const key=transactionKey(transaction); if(existingKeys.has(key))return false; existingKeys.add(key); return true; });
 
     for (const transaction of newTransactions) {
         await database.addTransaction(transaction, options.userId);
@@ -474,4 +475,15 @@ export async function previewStatement(buffer: Buffer, mimeType?: string, filena
     const lines = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const transactions = parseStatementLines(lines);
     return { recognized: transactions.length, transactions };
+}
+
+// Serialize imports per owner so concurrent submissions cannot both pass deduplication.
+const importQueues = new Map<number, Promise<unknown>>();
+export async function processStatement(buffer:Buffer,mimeType?:string,filename?:string,options:ProcessStatementOptions={}) {
+    if (!Number.isInteger(options.userId)) throw new Error('Usuário obrigatório para importação');
+    const owner=options.userId!;
+    const previous=importQueues.get(owner) || Promise.resolve();
+    const task=previous.catch(()=>{}).then(()=>processStatementUnlocked(buffer,mimeType,filename,options));
+    importQueues.set(owner,task);
+    try { return await task; } finally { if(importQueues.get(owner)===task) importQueues.delete(owner); }
 }

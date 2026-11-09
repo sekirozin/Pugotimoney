@@ -6,6 +6,18 @@ const router = Router();
 // GET /api/goals - Obter todas as metas financeiras
 router.get('/', goalController.getGoals);
 
+// GET /api/goals/groups - Obter grupos de assinaturas
+router.get('/groups', goalController.getSubscriptionGroups);
+
+// POST /api/goals/groups - Adicionar grupo de assinaturas
+router.post('/groups', goalController.addSubscriptionGroup);
+
+// PUT /api/goals/groups/:id - Atualizar grupo de assinaturas
+router.put('/groups/:id', goalController.updateSubscriptionGroup);
+
+// DELETE /api/goals/groups/:id - Excluir grupo de assinaturas
+router.delete('/groups/:id', goalController.deleteSubscriptionGroup);
+
 // GET /api/goals/summary - Obter resumo geral das metas
 router.get('/summary', goalController.getGoalsSummary);
 

@@ -1,20 +1,17 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
+import { civilDate, recurrenceDate, recurrenceTypes, todayCivil } from '../utils/calendar';
 
 export class Database {
     private db: sqlite3.Database;
 
-    constructor() {
-        const dbPath = path.join(__dirname, '../../database.sqlite');
-        this.db = new sqlite3.Database(dbPath, (err: Error | null) => {
-            if (err) {
-                console.error('Erro ao conectar ao banco de dados:', err);
-            } else {
-                console.log('Conectado ao banco de SQLite');
-                this.initializeTables();
-            }
-        });
+    readonly ready: Promise<void>;
+    private recurrenceRun: Promise<number> | null = null;
+
+    constructor(dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../database.sqlite')) {
+        this.db = new sqlite3.Database(dbPath);
         this.db.configure('busyTimeout', 5000);
+        this.ready = this.initializeTables();
     }
 
     private initializeTables() {
@@ -39,6 +36,8 @@ export class Database {
                         item TEXT NOT NULL,
                         category TEXT NOT NULL,
                         estimated_price REAL DEFAULT 0,
+                        purchase_url TEXT,
+                        sort_order INTEGER DEFAULT 0,
                         purchased BOOLEAN DEFAULT 0,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -64,6 +63,16 @@ export class Database {
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     );
                     
+                    CREATE TABLE IF NOT EXISTS installment_groups (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        due_day INTEGER CHECK (due_day IS NULL OR (due_day >= 1 AND due_day <= 31)),
+                        description TEXT,
+                        user_id INTEGER REFERENCES users(id),
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, name)
+                    );
+
                     CREATE TABLE IF NOT EXISTS installments (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         description TEXT NOT NULL,
@@ -75,10 +84,21 @@ export class Database {
                         start_date TEXT NOT NULL,
                         category TEXT NOT NULL,
                         credit_card_id INTEGER,
+                        installment_group_id INTEGER,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (credit_card_id) REFERENCES credit_cards (id)
+                        FOREIGN KEY (credit_card_id) REFERENCES credit_cards (id),
+                        FOREIGN KEY (installment_group_id) REFERENCES installment_groups (id)
                     );
                     
+                    CREATE TABLE IF NOT EXISTS subscription_groups (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        user_id INTEGER REFERENCES users(id),
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, name)
+                    );
+
                     CREATE TABLE IF NOT EXISTS financial_goals (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         name TEXT NOT NULL,
@@ -90,6 +110,16 @@ export class Database {
                     );
                     
                     CREATE TABLE IF NOT EXISTS incomes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        description TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        category TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        recurrence TEXT NOT NULL DEFAULT 'specific',
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    );
+                    
+                    CREATE TABLE IF NOT EXISTS expenses (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         description TEXT NOT NULL,
                         amount REAL NOT NULL,
@@ -124,14 +154,12 @@ export class Database {
             });
         };
 
-        createTables()
+        return createTables()
             .then(async () => {
                 await this.runMigrations();
                 await this.insertDefaultCategories();
             })
-            .catch((err) => {
-                console.error('Erro ao criar tabelas:', err);
-            });
+            ;
     }
 
     private async runMigrations() {
@@ -145,30 +173,58 @@ export class Database {
             "ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT ''",
             "ALTER TABLE transactions ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE shopping_items ADD COLUMN user_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE shopping_items ADD COLUMN purchase_url TEXT",
+            "ALTER TABLE shopping_items ADD COLUMN sort_order INTEGER DEFAULT 0",
             "ALTER TABLE credit_cards ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE budgets ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE installments ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE installments ADD COLUMN installment_amounts TEXT",
+            "CREATE TABLE IF NOT EXISTS installment_groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, due_day INTEGER CHECK (due_day IS NULL OR (due_day >= 1 AND due_day <= 31)), description TEXT, user_id INTEGER REFERENCES users(id), created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, name))",
+            "ALTER TABLE installments ADD COLUMN installment_group_id INTEGER REFERENCES installment_groups(id)",
+            "CREATE TABLE IF NOT EXISTS subscription_groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, user_id INTEGER REFERENCES users(id), created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, name))",
+            "ALTER TABLE financial_goals ADD COLUMN subscription_group_id INTEGER REFERENCES subscription_groups(id)",
+            "ALTER TABLE financial_goals ADD COLUMN payment_day INTEGER CHECK (payment_day IS NULL OR (payment_day >= 1 AND payment_day <= 31))",
+            "ALTER TABLE financial_goals ADD COLUMN start_date TEXT",
+            "ALTER TABLE financial_goals ADD COLUMN end_date TEXT",
             "ALTER TABLE financial_goals ADD COLUMN user_id INTEGER REFERENCES users(id)",
             "ALTER TABLE incomes ADD COLUMN user_id INTEGER REFERENCES users(id)",
-            "ALTER TABLE incomes ADD COLUMN recurrence TEXT NOT NULL DEFAULT 'specific'"
+            "ALTER TABLE incomes ADD COLUMN recurrence TEXT NOT NULL DEFAULT 'specific'",
+            "ALTER TABLE expenses ADD COLUMN user_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE expenses ADD COLUMN recurrence TEXT NOT NULL DEFAULT 'specific'",
+            "ALTER TABLE transactions ADD COLUMN recurrence_source_id INTEGER",
+            "ALTER TABLE transactions ADD COLUMN occurrence_date TEXT",
+            "CREATE TABLE IF NOT EXISTS removed_occurrences (source_id INTEGER NOT NULL, occurrence_date TEXT NOT NULL, PRIMARY KEY(source_id,occurrence_date))",
+            "CREATE TRIGGER IF NOT EXISTS remember_removed_occurrence BEFORE DELETE ON transactions WHEN OLD.recurrence_source_id IS NOT NULL BEGIN INSERT OR IGNORE INTO removed_occurrences(source_id,occurrence_date) VALUES(OLD.recurrence_source_id,OLD.occurrence_date); END",
+            "CREATE UNIQUE INDEX IF NOT EXISTS transaction_occurrence ON transactions(recurrence_source_id, occurrence_date) WHERE recurrence_source_id IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS transactions_user_date ON transactions(user_id, date)",
+            "CREATE INDEX IF NOT EXISTS incomes_user_date ON incomes(user_id, date)",
+            "CREATE INDEX IF NOT EXISTS expenses_user_date ON expenses(user_id, date)",
+            "ALTER TABLE expenses ADD COLUMN completed_at TEXT"
         ];
         for (const sql of migrations) {
-            try { await this.run(sql); } catch (e) { /* coluna já existe */ }
+            try { await this.run(sql); } catch (e) { if (!String(e).includes('duplicate column name')) throw e; }
         }
-        await this.assignLegacyDataToFirstUser();
+        // Unowned legacy rows require explicit review; never assign them to the first user.
     }
 
-    private async assignLegacyDataToFirstUser(): Promise<void> {
-        const users = await this.all<{ id: number }>('SELECT id FROM users ORDER BY id ASC LIMIT 1');
-        if (users.length === 0) return;
-        await this.assignLegacyDataToUser(users[0].id);
+    private async insertDefaultInstallmentGroupsForExistingUsers(): Promise<void> {
+        const users = await this.all<{ id: number }>('SELECT id FROM users');
+        for (const user of users) {
+            await this.insertDefaultInstallmentGroups(user.id);
+        }
     }
 
-    async assignLegacyDataToUser(userId: number): Promise<void> {
-        const tables = ['transactions', 'shopping_items', 'credit_cards', 'budgets', 'installments', 'financial_goals', 'incomes'];
-        for (const table of tables) {
-            await this.run(`UPDATE ${table} SET user_id = ? WHERE user_id IS NULL`, [userId]);
+    private async insertDefaultInstallmentGroups(userId: number): Promise<void> {
+        const groups = [
+            { name: 'CARTÃO - DIA 10', dueDay: 10, description: 'Parcelamentos agrupados para vencimento no dia 10' },
+            { name: 'CARTÃO - DIA 20', dueDay: 20, description: 'Parcelamentos agrupados para vencimento no dia 20' }
+        ];
+
+        for (const group of groups) {
+            await this.run(
+                `INSERT OR IGNORE INTO installment_groups (name, due_day, description, user_id) VALUES (?, ?, ?, ?)`,
+                [group.name, group.dueDay, group.description, userId]
+            );
         }
     }
 
@@ -187,8 +243,8 @@ export class Database {
 
         for (const category of defaultCategories) {
             await this.run(
-                `INSERT OR IGNORE INTO categories (name, type, color) VALUES (?, ?, ?)`,
-                [category.name, category.type, category.color]
+                `INSERT INTO categories (name, type, color) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = ? AND type = ?)`,
+                [category.name, category.type, category.color, category.name, category.type]
             );
         }
     }
@@ -251,6 +307,8 @@ export class Database {
                     conditions.push('date >= ?');
                     params.push(filters.startDate);
                 }
+                if (filters.minAmount !== undefined) { conditions.push('amount >= ?'); params.push(filters.minAmount); }
+                if (filters.maxAmount !== undefined) { conditions.push('amount <= ?'); params.push(filters.maxAmount); }
                 if (filters.endDate) {
                     conditions.push('date <= ?');
                     params.push(filters.endDate);
@@ -260,7 +318,10 @@ export class Database {
                 query += ' WHERE ' + conditions.join(' AND ');
             }
             
-            query += ' ORDER BY date DESC';
+            query += ' ORDER BY date DESC, id DESC';
+            if (filters?.limit !== undefined) {
+                query += ' LIMIT ? OFFSET ?'; params.push(filters.limit,filters.offset || 0);
+            }
             
             this.db.all(query, params, (err: Error | null, rows: any[]) => {
                 if (err) {
@@ -407,6 +468,104 @@ export class Database {
         });
     }
 
+    async addExpense(expense: any, userId?: number): Promise<number> {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                INSERT INTO expenses (description, amount, category, date, recurrence, user_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `);
+            stmt.run(
+                expense.description,
+                expense.amount,
+                expense.category,
+                expense.date,
+                expense.recurrence || 'specific',
+                userId || expense.user_id || null,
+                function(this: any, err: Error | null) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve((this as any).lastID);
+                    }
+                }
+            );
+            stmt.finalize();
+        });
+    }
+
+    async getExpenses(userId?: number): Promise<any[]> {
+        return new Promise((resolve, reject) => {
+            this.db.all(`
+                SELECT * FROM expenses${userId !== undefined ? ' WHERE user_id = ?' : ''} ORDER BY date DESC
+            `, userId !== undefined ? [userId] : [], (err: Error | null, rows: any[]) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows.map((row: any) => ({
+                        ...row,
+                        id: row.id,
+                        description: row.description,
+                        amount: row.amount,
+                        category: row.category,
+                        date: row.date,
+                        recurrence: row.recurrence || 'specific',
+                        completed_at: row.completed_at || null
+                    })));
+                }
+            });
+        });
+    }
+
+    async updateExpense(id: number, updates: any, userId?: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                UPDATE expenses
+                SET description = ?, amount = ?, category = ?, date = ?, recurrence = ?
+                WHERE id = ?${userId !== undefined ? ' AND user_id = ?' : ''}
+            `);
+            stmt.run(
+                updates.description,
+                updates.amount,
+                updates.category,
+                updates.date,
+                updates.recurrence || 'specific',
+                id,
+                ...(userId !== undefined ? [userId] : []),
+                function(this: any, err: Error | null) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve((this as any).changes > 0);
+                    }
+                }
+            );
+            stmt.finalize();
+        });
+    }
+
+    /** Marca (data civil) ou desmarca (null) a despesa como concluída. */
+    async setExpenseCompleted(id: number, completedAt: string | null, userId: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            this.db.run('UPDATE expenses SET completed_at = ? WHERE id = ? AND user_id = ?', [completedAt, id, userId], function(this: any, err: Error | null) {
+                if (err) reject(err); else resolve(this.changes > 0);
+            });
+        });
+    }
+
+    async deleteExpense(id: number, userId?: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`DELETE FROM expenses WHERE id = ?${userId !== undefined ? ' AND user_id = ?' : ''}`);
+            stmt.run(id, ...(userId !== undefined ? [userId] : []), function(this: any, err: Error | null) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve((this as any).changes > 0);
+                }
+            });
+            stmt.finalize();
+        });
+    }
+
     async addUser(user: { username: string; password: string; role: string }): Promise<number> {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)');
@@ -457,55 +616,36 @@ export class Database {
     }
 
     async processRecurringTransactions(): Promise<number> {
-        const nextDate = (d: Date, rec: string): Date => {
-            const nd = new Date(d);
-            if (rec === 'daily') nd.setDate(nd.getDate() + 1);
-            else if (rec === 'weekly') nd.setDate(nd.getDate() + 7);
-            else if (rec === 'monthly') nd.setMonth(nd.getMonth() + 1);
-            else if (rec === 'yearly') nd.setFullYear(nd.getFullYear() + 1);
-            return nd;
-        };
+        await this.ready;
+        if (this.recurrenceRun) return this.recurrenceRun;
+        this.recurrenceRun = this.generateRecurringTransactions().finally(() => { this.recurrenceRun = null; });
+        return this.recurrenceRun;
+    }
 
-        const rows = await this.all<Record<string, any>>(
-            `SELECT * FROM transactions WHERE recurrence IS NOT NULL AND recurrence != ''`
-        );
-
+    private async generateRecurringTransactions(): Promise<number> {
+        const rows = await this.all<any>(`SELECT * FROM transactions WHERE user_id IS NOT NULL AND recurrence IS NOT NULL AND recurrence != '' AND recurrence_source_id IS NULL`);
+        const today = todayCivil();
         let created = 0;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        for (const t of rows) {
-            const rec = t.recurrence as string;
-            const endDate = t.recurrence_end_date ? new Date(t.recurrence_end_date + 'T00:00:00') : null;
-            let current = new Date(t.date.split('T')[0] + 'T00:00:00');
-            let last = new Date(current);
-
-            while (current <= today) {
-                const next = nextDate(current, rec);
-                if (endDate && next > endDate) break;
-                current = next;
+        for (const source of rows) {
+            const anchor = civilDate(source.date);
+            const end = source.recurrence_end_date ? civilDate(source.recurrence_end_date) : null;
+            if (!anchor || !recurrenceTypes.includes(source.recurrence) || (source.recurrence_end_date && !end)) continue;
+            for (let index = 1; index <= 100_000; index++) {
+                const date = recurrenceDate(anchor, source.recurrence, index);
+                if (date > today || (end && date > end)) break;
+                const changed = await new Promise<number>((resolve, reject) => {
+                    this.db.run(`INSERT OR IGNORE INTO transactions
+                        (type, amount, category, description, date, payment_method, credit_card_id, user_id, recurrence_source_id, occurrence_date)
+                        SELECT type, amount, category, description, ?, payment_method, credit_card_id, user_id, id, ?
+                        FROM transactions WHERE id = ? AND user_id = ?
+                        AND NOT EXISTS (SELECT 1 FROM removed_occurrences WHERE source_id = ? AND occurrence_date = ?)`,
+                        [date, date, source.id, source.user_id, source.id, date], function(err) {
+                            if (err) reject(err); else resolve(this.changes);
+                        });
+                });
+                created += changed;
             }
-
-            if (current.getTime() === last.getTime()) continue;
-
-            let gen = new Date(last);
-            while (true) {
-                const next = nextDate(gen, rec);
-                if (next > today) break;
-                if (endDate && next > endDate) break;
-                const dateStr = next.toISOString().split('T')[0];
-                await this.run(
-                    `INSERT INTO transactions (type, amount, category, description, date, payment_method) VALUES (?, ?, ?, ?, ?, ?)`,
-                    [t.type, t.amount, t.category, t.description, dateStr + 'T12:00:00', t.payment_method || 'pix']
-                );
-                created++;
-                gen = next;
-            }
-
-            const newDateStr = current.toISOString().split('T')[0];
-            await this.run(`UPDATE transactions SET date = ? WHERE id = ?`, [newDateStr + 'T12:00:00', t.id]);
         }
-
         return created;
     }
 
@@ -528,15 +668,17 @@ export class Database {
     async addShoppingItem(item: any, userId?: number): Promise<number> {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
-                INSERT INTO shopping_items (item, category, estimated_price, purchased, user_id)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO shopping_items (item, category, estimated_price, purchase_url, purchased, user_id, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM shopping_items WHERE user_id = ?))
             `);
             
             stmt.run(
                 item.item,
                 item.category,
                 item.estimatedPrice || item.estimated_price || 0,
+                item.purchaseUrl || item.purchase_url || null,
                 item.purchased ? 1 : 0,
+                userId || item.user_id || null,
                 userId || item.user_id || null,
                 function(this: any, err: Error | null) {
                     if (err) {
@@ -554,7 +696,7 @@ export class Database {
     async getShoppingItems(userId?: number): Promise<any[]> {
         return new Promise((resolve, reject) => {
             this.db.all(
-                `SELECT * FROM shopping_items${userId !== undefined ? ' WHERE user_id = ?' : ''} ORDER BY purchased ASC, created_at DESC`,
+                `SELECT * FROM shopping_items${userId !== undefined ? ' WHERE user_id = ?' : ''} ORDER BY purchased ASC, sort_order ASC, created_at DESC`,
                 userId !== undefined ? [userId] : [],
                 (err: Error | null, rows: any[]) => {
                 if (err) {
@@ -563,6 +705,8 @@ export class Database {
                     resolve(rows.map((row: any) => ({
                         ...row,
                         estimatedPrice: row.estimated_price,
+                        purchaseUrl: row.purchase_url,
+                        sortOrder: row.sort_order,
                         purchased: row.purchased === 1
                     })));
                 }
@@ -574,7 +718,7 @@ export class Database {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
                 UPDATE shopping_items 
-                SET item = ?, category = ?, estimated_price = ?, purchased = ?, updated_at = CURRENT_TIMESTAMP
+                SET item = ?, category = ?, estimated_price = ?, purchase_url = ?, purchased = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?${userId !== undefined ? ' AND user_id = ?' : ''}
             `);
             
@@ -582,6 +726,7 @@ export class Database {
                 updates.item,
                 updates.category,
                 updates.estimatedPrice || updates.estimated_price,
+                updates.purchaseUrl || updates.purchase_url || null,
                 updates.purchased ? 1 : 0,
                 id,
                 ...(userId !== undefined ? [userId] : []),
@@ -598,6 +743,21 @@ export class Database {
         });
     }
 
+    async toggleShoppingItemPurchased(id: number, userId: number): Promise<boolean | null> {
+        await this.run(
+            `UPDATE shopping_items
+             SET purchased = CASE WHEN purchased = 1 THEN 0 ELSE 1 END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND user_id = ?`,
+            [id, userId]
+        );
+        const items = await this.all<{ purchased: number }>(
+            'SELECT purchased FROM shopping_items WHERE id = ? AND user_id = ?',
+            [id, userId]
+        );
+        return items.length === 0 ? null : items[0].purchased === 1;
+    }
+
     async deleteShoppingItem(id: number, userId?: number): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`DELETE FROM shopping_items WHERE id = ?${userId !== undefined ? ' AND user_id = ?' : ''}`);
@@ -610,6 +770,30 @@ export class Database {
             });
             stmt.finalize();
         });
+    }
+
+    async reorderShoppingItems(itemIds: number[], userId: number): Promise<boolean> {
+        const ownedItems = await this.all<{ id: number }>(
+            'SELECT id FROM shopping_items WHERE user_id = ?',
+            [userId]
+        );
+        const ownedIds = new Set(ownedItems.map(item => item.id));
+        if (itemIds.length !== ownedIds.size || itemIds.some(id => !ownedIds.has(id))) return false;
+
+        await this.run('BEGIN TRANSACTION');
+        try {
+            for (let index = 0; index < itemIds.length; index++) {
+                await this.run(
+                    'UPDATE shopping_items SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
+                    [index, itemIds[index], userId]
+                );
+            }
+            await this.run('COMMIT');
+            return true;
+        } catch (error) {
+            await this.run('ROLLBACK');
+            throw error;
+        }
     }
 
     async addCreditCard(card: any, userId?: number): Promise<number> {
@@ -750,7 +934,7 @@ export class Database {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
                 UPDATE budgets 
-                SET category = ?, amount = ?, period = ?, spent = ?
+                SET category = ?, amount = ?, period = ?
                 WHERE id = ?${userId !== undefined ? ' AND user_id = ?' : ''}
             `);
             
@@ -758,7 +942,6 @@ export class Database {
                 updates.category,
                 updates.amount,
                 updates.period,
-                updates.spent,
                 id,
                 ...(userId !== undefined ? [userId] : []),
                 function(this: any, err: Error | null) {
@@ -788,14 +971,182 @@ export class Database {
         });
     }
 
+
+    async addInstallmentGroup(group: any, userId: number): Promise<number> {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                INSERT INTO installment_groups (name, due_day, description, user_id)
+                VALUES (?, ?, ?, ?)
+            `);
+
+            stmt.run(
+                group.name,
+                group.dueDay ?? group.due_day ?? null,
+                group.description ?? null,
+                userId,
+                function(this: any, err: Error | null) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve((this as any).lastID);
+                    }
+                }
+            );
+
+            stmt.finalize();
+        });
+    }
+
+    async getInstallmentGroups(userId: number): Promise<any[]> {
+        return new Promise((resolve, reject) => {
+            this.db.all(`
+                SELECT * FROM installment_groups
+                WHERE user_id = ?
+                ORDER BY COALESCE(due_day, 99), name
+            `, [userId], (err: Error | null, rows: any[]) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows.map((row: any) => ({
+                        ...row,
+                        dueDay: row.due_day
+                    })));
+                }
+            });
+        });
+    }
+
+    async updateInstallmentGroup(id: number, updates: any, userId: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                UPDATE installment_groups
+                SET name = ?, due_day = ?, description = ?
+                WHERE id = ? AND user_id = ?
+            `);
+
+            stmt.run(
+                updates.name,
+                updates.dueDay ?? updates.due_day ?? null,
+                updates.description ?? null,
+                id,
+                userId,
+                function(this: any, err: Error | null) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve((this as any).changes > 0);
+                    }
+                }
+            );
+
+            stmt.finalize();
+        });
+    }
+
+    async deleteInstallmentGroup(id: number, userId: number): Promise<boolean> {
+        await this.run('UPDATE installments SET installment_group_id = NULL WHERE installment_group_id = ? AND user_id = ?', [id, userId]);
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare('DELETE FROM installment_groups WHERE id = ? AND user_id = ?');
+            stmt.run(id, userId, function(this: any, err: Error | null) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve((this as any).changes > 0);
+                }
+            });
+            stmt.finalize();
+        });
+    }
+
+    async addSubscriptionGroup(group: any, userId: number): Promise<number> {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                INSERT INTO subscription_groups (name, description, user_id)
+                VALUES (?, ?, ?)
+            `);
+
+            stmt.run(
+                group.name,
+                group.description ?? null,
+                userId,
+                function(this: any, err: Error | null) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve((this as any).lastID);
+                    }
+                }
+            );
+
+            stmt.finalize();
+        });
+    }
+
+    async getSubscriptionGroups(userId: number): Promise<any[]> {
+        return new Promise((resolve, reject) => {
+            this.db.all(`
+                SELECT * FROM subscription_groups
+                WHERE user_id = ?
+                ORDER BY name
+            `, [userId], (err: Error | null, rows: any[]) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    }
+
+    async updateSubscriptionGroup(id: number, updates: any, userId: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                UPDATE subscription_groups
+                SET name = ?, description = ?
+                WHERE id = ? AND user_id = ?
+            `);
+
+            stmt.run(
+                updates.name,
+                updates.description ?? null,
+                id,
+                userId,
+                function(this: any, err: Error | null) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve((this as any).changes > 0);
+                    }
+                }
+            );
+
+            stmt.finalize();
+        });
+    }
+
+    async deleteSubscriptionGroup(id: number, userId: number): Promise<boolean> {
+        await this.run('UPDATE financial_goals SET subscription_group_id = NULL WHERE subscription_group_id = ? AND user_id = ?', [id, userId]);
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare('DELETE FROM subscription_groups WHERE id = ? AND user_id = ?');
+            stmt.run(id, userId, function(this: any, err: Error | null) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve((this as any).changes > 0);
+                }
+            });
+            stmt.finalize();
+        });
+    }
+
     async addInstallment(installment: any, userId?: number): Promise<number> {
         return new Promise((resolve, reject) => {
             const installmentAmounts = this.serializeInstallmentAmounts(installment);
             const stmt = this.db.prepare(`
                 INSERT INTO installments (
                     description, total_amount, installment_amount, installment_amounts, total_installments,
-                    current_installment, start_date, category, credit_card_id, user_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    current_installment, start_date, category, credit_card_id, installment_group_id, user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
             
             stmt.run(
@@ -808,6 +1159,7 @@ export class Database {
                 installment.startDate ?? installment.start_date,
                 installment.category,
                 installment.creditCardId ?? installment.credit_card_id ?? null,
+                installment.installmentGroupId ?? installment.installment_group_id ?? null,
                 userId ?? installment.user_id ?? null,
                 function(this: any, err: Error | null) {
                     if (err) {
@@ -825,11 +1177,13 @@ export class Database {
     async getInstallments(userId?: number): Promise<any[]> {
         return new Promise((resolve, reject) => {
             this.db.all(`
-                SELECT i.*, c.name as card_name, c.bank as card_bank
+                SELECT i.*, c.name as card_name, c.bank as card_bank,
+                       g.name as group_name, g.due_day as group_due_day, g.description as group_description
                 FROM installments i
                 LEFT JOIN credit_cards c ON i.credit_card_id = c.id
+                LEFT JOIN installment_groups g ON i.installment_group_id = g.id
                 ${userId !== undefined ? 'WHERE i.user_id = ?' : ''}
-                ORDER BY i.start_date DESC
+                ORDER BY COALESCE(g.due_day, 99), g.name, i.start_date DESC
             `, userId !== undefined ? [userId] : [], (err: Error | null, rows: any[]) => {
                 if (err) {
                     reject(err);
@@ -842,7 +1196,11 @@ export class Database {
                         totalInstallments: row.total_installments,
                         currentInstallment: row.current_installment,
                         startDate: row.start_date,
-                        creditCardId: row.credit_card_id
+                        creditCardId: row.credit_card_id,
+                        installmentGroupId: row.installment_group_id,
+                        groupName: row.group_name,
+                        groupDueDay: row.group_due_day,
+                        groupDescription: row.group_description
                     })));
                 }
             });
@@ -859,7 +1217,8 @@ export class Database {
             const currentInstallment = updates.currentInstallment ?? updates.current_installment;
             const category = updates.category;
             const startDate = updates.startDate ?? updates.start_date;
-            const creditCardId = updates.creditCardId ?? updates.credit_card_id;
+            const creditCardId = updates.creditCardId ?? updates.credit_card_id ?? null;
+            const installmentGroupId = updates.installmentGroupId ?? updates.installment_group_id ?? null;
 
             const stmt = this.db.prepare(`
                 UPDATE installments
@@ -871,7 +1230,8 @@ export class Database {
                     current_installment = ?,
                     category = ?,
                     start_date = ?,
-                    credit_card_id = ?
+                    credit_card_id = ?,
+                    installment_group_id = ?
                 WHERE id = ?${userId !== undefined ? ' AND user_id = ?' : ''}
             `);
 
@@ -885,6 +1245,7 @@ export class Database {
                 category,
                 startDate,
                 creditCardId,
+                installmentGroupId,
                 id,
                 ...(userId !== undefined ? [userId] : []),
                 function(this: any, err: Error | null) {
@@ -994,8 +1355,8 @@ export class Database {
     async addFinancialGoal(goal: any, userId?: number): Promise<number> {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
-                INSERT INTO financial_goals (name, target_amount, current_amount, target_date, category, user_id)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO financial_goals (name, target_amount, current_amount, target_date, category, subscription_group_id, payment_day, start_date, end_date, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
             
             stmt.run(
@@ -1004,6 +1365,10 @@ export class Database {
                 goal.currentAmount || goal.current_amount || 0,
                 goal.targetDate || goal.target_date,
                 goal.category,
+                goal.subscriptionGroupId ?? goal.subscription_group_id ?? null,
+                goal.paymentDay ?? goal.payment_day ?? null,
+                goal.startDate ?? goal.start_date ?? null,
+                goal.endDate ?? goal.end_date ?? null,
                 userId || goal.user_id || null,
                 function(this: any, err: Error | null) {
                     if (err) {
@@ -1031,7 +1396,11 @@ export class Database {
                         ...row,
                         targetAmount: row.target_amount,
                         currentAmount: row.current_amount,
-                        targetDate: row.target_date
+                        targetDate: row.target_date,
+                        subscriptionGroupId: row.subscription_group_id,
+                        paymentDay: row.payment_day,
+                        startDate: row.start_date,
+                        endDate: row.end_date
                     })));
                 }
             });
@@ -1042,7 +1411,7 @@ export class Database {
         return new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
                 UPDATE financial_goals 
-                SET name = ?, target_amount = ?, current_amount = ?, target_date = ?, category = ?
+                SET name = ?, target_amount = ?, current_amount = ?, target_date = ?, category = ?, subscription_group_id = ?, payment_day = ?, start_date = ?, end_date = ?
                 WHERE id = ?${userId !== undefined ? ' AND user_id = ?' : ''}
             `);
             
@@ -1052,6 +1421,10 @@ export class Database {
                 updates.currentAmount || updates.current_amount,
                 updates.targetDate || updates.target_date,
                 updates.category,
+                updates.subscriptionGroupId ?? updates.subscription_group_id ?? null,
+                updates.paymentDay ?? updates.payment_day ?? null,
+                updates.startDate ?? updates.start_date ?? null,
+                updates.endDate ?? updates.end_date ?? null,
                 id,
                 ...(userId !== undefined ? [userId] : []),
                 function(this: any, err: Error | null) {

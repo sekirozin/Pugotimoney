@@ -3,7 +3,97 @@ import { database } from '../models/database';
 import { getFinancialGoalProgress } from '../utils/helpers';
 import { AuthRequest } from '../middleware/auth';
 
+// Interpreta "YYYY-MM-DD" como dia civil, sem deslocamento de fuso horário
+function parseDateOnly(value: string): Date {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    }
+    return new Date(value);
+}
+
 export class GoalController {
+    // Obter grupos de assinaturas
+    async getSubscriptionGroups(req: AuthRequest, res: Response) {
+        try {
+            const groups = await database.getSubscriptionGroups(req.user!.id);
+            res.json({ success: true, data: groups, total: groups.length });
+        } catch (error) {
+            console.error('Erro ao buscar grupos de assinaturas:', error);
+            res.status(500).json({ success: false, error: 'Erro ao buscar grupos de assinaturas' });
+        }
+    }
+
+    // Adicionar grupo de assinaturas
+    async addSubscriptionGroup(req: AuthRequest, res: Response) {
+        try {
+            const groupData = req.body;
+            const name = String(groupData.name ?? '').trim();
+
+            if (!name) {
+                return res.status(400).json({ success: false, error: 'Nome do grupo é obrigatório' });
+            }
+
+            const groupId = await database.addSubscriptionGroup({
+                name,
+                description: groupData.description ?? null
+            }, req.user!.id);
+
+            res.status(201).json({
+                success: true,
+                data: { id: groupId, name, description: groupData.description ?? null },
+                message: 'Grupo de assinaturas adicionado com sucesso'
+            });
+        } catch (error: any) {
+            console.error('Erro ao adicionar grupo de assinaturas:', error);
+            res.status(500).json({ success: false, error: error?.code === 'SQLITE_CONSTRAINT' ? 'Já existe um grupo com esse nome' : 'Erro ao adicionar grupo de assinaturas' });
+        }
+    }
+
+    // Atualizar grupo de assinaturas
+    async updateSubscriptionGroup(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            const groupData = req.body;
+            const name = String(groupData.name ?? '').trim();
+
+            if (!name) {
+                return res.status(400).json({ success: false, error: 'Nome do grupo é obrigatório' });
+            }
+
+            const updated = await database.updateSubscriptionGroup(parseInt(id), {
+                name,
+                description: groupData.description ?? null
+            }, req.user!.id);
+
+            if (!updated) {
+                return res.status(404).json({ success: false, error: 'Grupo não encontrado' });
+            }
+
+            res.json({ success: true, message: 'Grupo de assinaturas atualizado com sucesso' });
+        } catch (error: any) {
+            console.error('Erro ao atualizar grupo de assinaturas:', error);
+            res.status(500).json({ success: false, error: error?.code === 'SQLITE_CONSTRAINT' ? 'Já existe um grupo com esse nome' : 'Erro ao atualizar grupo de assinaturas' });
+        }
+    }
+
+    // Excluir grupo de assinaturas
+    async deleteSubscriptionGroup(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            const deleted = await database.deleteSubscriptionGroup(parseInt(id), req.user!.id);
+
+            if (!deleted) {
+                return res.status(404).json({ success: false, error: 'Grupo não encontrado' });
+            }
+
+            res.json({ success: true, message: 'Grupo excluído; assinaturas foram movidas para Sem grupo' });
+        } catch (error) {
+            console.error('Erro ao excluir grupo de assinaturas:', error);
+            res.status(500).json({ success: false, error: 'Erro ao excluir grupo de assinaturas' });
+        }
+    }
+
     // Obter todas as metas financeiras
     async getGoals(req: AuthRequest, res: Response) {
         try {
@@ -119,32 +209,56 @@ export class GoalController {
                 });
             }
 
-            // Verificar se já foi paga este mês
+            // Mês-alvo: data informada (para meses passados/futuros) ou mês atual
+            const requestedDate = typeof req.body?.date === 'string' ? req.body.date : '';
+            const isValidDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate);
+            const targetDate = isValidDate ? new Date(requestedDate + 'T12:00:00') : new Date();
+            const targetYear = targetDate.getFullYear();
+            const targetMonth = targetDate.getMonth();
+
+            // Respeitar a vigência da assinatura
+            if (goal.startDate) {
+                const start = parseDateOnly(goal.startDate);
+                if (!Number.isNaN(start.getTime()) && (start.getFullYear() * 12 + start.getMonth()) > targetYear * 12 + targetMonth) {
+                    return res.status(400).json({ success: false, error: 'Esta assinatura ainda não estava ativa neste mês' });
+                }
+            }
+            if (goal.endDate) {
+                const end = parseDateOnly(goal.endDate);
+                if (!Number.isNaN(end.getTime()) && (end.getFullYear() * 12 + end.getMonth()) < targetYear * 12 + targetMonth) {
+                    return res.status(400).json({ success: false, error: 'Esta assinatura foi cancelada antes deste mês' });
+                }
+            }
+
+            // Verificar se já foi paga no mês alvo
             const transactions = await database.getTransactions(undefined, req.user!.id);
-            const now = new Date();
-            const currentMonth = now.getMonth();
-            const currentYear = now.getFullYear();
 
             const alreadyPaid = transactions.some(t => {
                 const d = new Date(t.date);
                 return t.description === goal.name + ' (Assinatura)'
-                    && d.getMonth() === currentMonth
-                    && d.getFullYear() === currentYear;
+                    && d.getMonth() === targetMonth
+                    && d.getFullYear() === targetYear;
             });
 
             if (alreadyPaid) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Esta assinatura já foi paga este mês'
+                    error: 'Esta assinatura já foi paga neste mês'
                 });
             }
 
+            // Respeitar o dia de pagamento dentro do mês alvo quando possível
+            let transactionDay = targetDate.getDate();
+            if (isValidDate && goal.paymentDay) {
+                const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+                transactionDay = Math.min(Number(goal.paymentDay), daysInTargetMonth);
+            }
             const transaction = {
                 type: 'expense',
                 amount: goal.targetAmount,
                 category: goal.category || 'assinaturas',
                 description: goal.name + ' (Assinatura)',
-                date: now.toISOString().split('T')[0] + 'T12:00:00',
+                date: `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(transactionDay).padStart(2, '0')}T12:00:00`,
                 payment_method: 'debito'
             };
 

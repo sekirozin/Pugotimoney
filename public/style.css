@@ -12,27 +12,27 @@
     --muted: #666666;
     --border: #eeeeee;
     --input-border: #dddddd;
-    --hover: #f8f9fa;
-    --primary: #1d7af2;
-    --primary-hover: #0b63d1;
-    --primary-strong: #0b4db8;
+    --hover: var(--pt-painel,#f8f9fa);
+    --primary: var(--pt-destaque,#1d7af2);
+    --primary-hover: var(--pt-destaque,#0b63d1);
+    --primary-strong: var(--pt-destaque,#0b4db8);
     --success: #16a34a;
     --warning: #f59e0b;
     --shadow: rgba(0,0,0,0.1);
 }
 
 body.dark-mode {
-    --bg: #07111f;
-    --surface: #0f1d31;
-    --surface-soft: #142744;
-    --text: #eaf2ff;
-    --muted: #9fb5d1;
-    --border: #233a5c;
-    --input-border: #335275;
-    --hover: #193252;
-    --primary: #4aa3ff;
-    --primary-hover: #2588f0;
-    --primary-strong: #0f67d8;
+    --bg: var(--pt-painel,#07111f);
+    --surface: var(--pt-destaque-escuro,#0f1d31);
+    --surface-soft: var(--pt-destaque-escuro,#142744);
+    --text: var(--pt-painel,#eaf2ff);
+    --muted: var(--pt-destaque,#9fb5d1);
+    --border: var(--pt-destaque-escuro,#233a5c);
+    --input-border: var(--pt-destaque,#335275);
+    --hover: var(--pt-destaque-escuro,#193252);
+    --primary: var(--pt-destaque,#4aa3ff);
+    --primary-hover: var(--pt-destaque,#2588f0);
+    --primary-strong: var(--pt-destaque,#0f67d8);
     --success: #22c55e;
     --warning: #f59e0b;
     --shadow: rgba(0,0,0,0.35);
@@ -202,7 +202,7 @@ nav button:hover, nav button.active {
 }
 
 .card h3 {
-    color: var(--primary);
+    color: var(--pt-destaque-texto);
     margin-bottom: 15px;
     font-size: 1.2rem;
 }
@@ -271,7 +271,7 @@ nav button:hover, nav button.active {
 
 .btn {
     background: var(--primary);
-    color: white;
+    color: var(--pt-sobre-destaque);
     border: none;
     padding: 10px 20px;
     border-radius: 5px;
@@ -286,7 +286,7 @@ nav button:hover, nav button.active {
 
 .btn-small {
     background: var(--primary);
-    color: white;
+    color: var(--pt-sobre-destaque);
     border: none;
     padding: 5px 10px;
     border-radius: 3px;
@@ -297,6 +297,13 @@ nav button:hover, nav button.active {
 
 .btn-small:hover {
     background: var(--primary-hover);
+}
+
+.shopping-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
 }
 
 .btn-small.checked {
@@ -353,7 +360,7 @@ nav button:hover, nav button.active {
 }
 
 .chart-container h3 {
-    color: var(--primary);
+    color: var(--pt-destaque-texto);
     margin-bottom: 15px;
     font-size: 1.2rem;
 }
@@ -410,7 +417,7 @@ nav button:hover, nav button.active {
 }
 
 .transaction-item:hover {
-    background: #f8f9fa;
+    background: var(--pt-painel,#f8f9fa);
 }
 
 .transaction-info {
@@ -419,7 +426,7 @@ nav button:hover, nav button.active {
 
 .transaction-category {
     font-size: 12px;
-    color: var(--primary);
+    color: var(--pt-destaque-texto);
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-top: 4px;
@@ -490,12 +497,57 @@ nav button:hover, nav button.active {
 }
 
 .shopping-item:hover {
-    background: #f8f9fa;
+    background: var(--pt-painel,#f8f9fa);
 }
 
 .shopping-item.purchased {
     opacity: 0.6;
     text-decoration: line-through;
+}
+
+.shopping-sortable {
+    transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+.shopping-sortable.dragging {
+    opacity: 0.45;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.shopping-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: grab;
+    padding: 6px 2px;
+    touch-action: none;
+}
+
+.shopping-drag-handle:active {
+    cursor: grabbing;
+}
+
+.shopping-order-buttons {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-right: 2px;
+}
+
+.shopping-order-button {
+    min-width: 26px;
+    width: 26px;
+    height: 22px;
+    padding: 0;
+    line-height: 1;
+}
+
+.shopping-order-button .lucide-icon {
+    width: 14px;
+    height: 14px;
 }
 
 .card-item {
@@ -527,7 +579,7 @@ nav button:hover, nav button.active {
 }
 
 .installment-item:hover {
-    background: #f8f9fa;
+    background: var(--pt-painel,#f8f9fa);
 }
 
 .installment-progress {
@@ -549,8 +601,7 @@ nav button:hover, nav button.active {
     height: 100%;
     background: var(--primary);
     border-radius: 3px;
-    transition: width 0.3s;
-}
+    transition: width 0.3s;color:var(--pt-sobre-destaque)}
 
 .installment-month-status {
     display: inline-flex;
@@ -582,9 +633,9 @@ nav button:hover, nav button.active {
 }
 
 .installment-month-status.upcoming {
-    background: rgba(74, 163, 255, 0.14);
-    border-color: rgba(74, 163, 255, 0.35);
-    color: var(--primary);
+    background: color-mix(in srgb,var(--pt-destaque,rgb(74,163,255)) 14%,transparent);
+    border-color: color-mix(in srgb,var(--pt-destaque,rgb(74,163,255)) 35%,transparent);
+    color: var(--pt-destaque-texto);
 }
 
 .installment-paid-card {
@@ -601,7 +652,7 @@ nav button:hover, nav button.active {
 }
 
 .subscription-item:hover {
-    background: #f8f9fa;
+    background: var(--pt-painel,#f8f9fa);
 }
 
 .budget-item {
@@ -614,7 +665,7 @@ nav button:hover, nav button.active {
 }
 
 .budget-item:hover {
-    background: #f8f9fa;
+    background: var(--pt-painel,#f8f9fa);
 }
 
 .budget-bar {
@@ -642,7 +693,7 @@ nav button:hover, nav button.active {
 }
 
 .goal-item:hover {
-    background: #f8f9fa;
+    background: var(--pt-painel,#f8f9fa);
 }
 
 @media (max-width: 768px) {
@@ -693,7 +744,7 @@ nav button:hover, nav button.active {
 
 .badge {
     background: var(--primary);
-    color: white;
+    color: var(--pt-sobre-destaque);
     padding: 2px 10px;
     border-radius: 12px;
     font-size: 12px;
@@ -726,7 +777,7 @@ nav button:hover, nav button.active {
     justify-content: center;
     font-size: 32px;
     font-weight: 700;
-    box-shadow: 0 4px 15px rgba(29, 122, 242, 0.35);
+    box-shadow: 0 4px 15px color-mix(in srgb,var(--pt-destaque,rgb(29,122,242)) 35%,transparent);
 }
 
 .profile-name {
@@ -744,7 +795,7 @@ nav button:hover, nav button.active {
     font-weight: 600;
     text-transform: capitalize;
     background: var(--primary);
-    color: white;
+    color: var(--pt-sobre-destaque);
 }
 
 .profile-badge[data-role="admin"] {
@@ -777,7 +828,7 @@ nav button:hover, nav button.active {
 .profile-section-title .lucide-icon {
     width: 18px;
     height: 18px;
-    color: var(--primary);
+    color: var(--pt-destaque-texto);
 }
 
 .profile-input {
@@ -794,7 +845,7 @@ nav button:hover, nav button.active {
 .profile-input:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(29, 122, 242, 0.12);
+    box-shadow: 0 0 0 3px color-mix(in srgb,var(--pt-destaque,rgb(29,122,242)) 12%,transparent);
 }
 
 .profile-save-btn {
@@ -865,7 +916,7 @@ body.dark-mode .card h3,
 body.dark-mode .chart-container h3,
 body.dark-mode .transaction-category,
 body.dark-mode .profile-section-title .lucide-icon {
-    color: var(--primary);
+    color: var(--pt-destaque-texto);
 }
 
 body.dark-mode .profile-menu-header,
@@ -923,8 +974,7 @@ body.dark-mode .btn,
 body.dark-mode .btn-small,
 body.dark-mode .badge,
 body.dark-mode .profile-badge {
-    background: var(--primary);
-}
+    background: var(--primary);color:var(--pt-sobre-destaque)}
 
 body.dark-mode .btn:hover,
 body.dark-mode .btn-small:hover {
@@ -937,7 +987,7 @@ body.dark-mode .budget-bar {
 }
 
 body.dark-mode #auth-page {
-    background: linear-gradient(135deg, #07111f 0%, #0f67d8 100%) !important;
+    background: linear-gradient(135deg, var(--pt-painel,#07111f) 0%, var(--pt-destaque,#0f67d8) 100%) !important;
 }
 
 body.dark-mode #auth-page > div {

@@ -1,3 +1,4 @@
+import { finance, financialData } from '../services/financeService';
 import { Request, Response } from 'express';
 import { database } from '../models/database';
 import { AuthRequest } from '../middleware/auth';
@@ -11,7 +12,8 @@ export class DashboardController {
             const targetMonth = month ? parseInt(month as string) : currentDate.getMonth() + 1;
             const targetYear = year ? parseInt(year as string) : currentDate.getFullYear();
 
-            const transactions = await database.getTransactions(undefined, req.user!.id);
+            const data = await financialData(req.user!.id);
+            const transactions = data.transactions;
             const budgets = await database.getBudgets(req.user!.id);
 
             const now = new Date();
@@ -19,43 +21,16 @@ export class DashboardController {
             const endOfMonthDate = new Date(targetYear, targetMonth, 0);
             const endOfMonth = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(endOfMonthDate.getDate()).padStart(2, '0')}`;
 
-            const monthlyTransactions = transactions.filter(t => {
-                const dateStr = t.date.split('T')[0];
-                return dateStr >= startOfMonth && dateStr <= endOfMonth;
-            });
-
-            const totalBalance = transactions.reduce((sum, t) => {
-                return sum + (t.type === 'income' ? t.amount : -t.amount);
-            }, 0);
-
-            const monthlyIncome = monthlyTransactions
-                .filter(t => t.type === 'income')
-                .reduce((sum, t) => sum + t.amount, 0);
-
-            const monthlyExpenses = monthlyTransactions
-                .filter(t => t.type === 'expense')
-                .reduce((sum, t) => sum + t.amount, 0);
-
-            const categoryTotals: Record<string, number> = {};
-            monthlyTransactions
-                .filter(t => t.type === 'expense')
-                .forEach(t => {
-                    categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
-                });
-
-            const budgetStatus: Record<string, any> = {};
-            budgets.forEach(budget => {
-                const spent = categoryTotals[budget.category] || 0;
-                const remaining = budget.amount - spent;
-                const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
-                budgetStatus[budget.category] = {
-                    budget: budget.amount,
-                    spent,
-                    remaining,
-                    percentage,
-                    status: percentage > 100 ? 'over' : percentage > 80 ? 'warning' : 'within'
-                };
-            });
+            if (!Number.isInteger(targetMonth) || targetMonth < 1 || targetMonth > 12 || !Number.isInteger(targetYear)) { res.status(400).json({success:false,error:'Período inválido'}); return; }
+            const totals = finance.summary(data,targetYear,targetMonth);
+            const monthlyTransactions = totals.entries;
+            const totalBalance = totals.balance;
+            const monthlyIncome = totals.income, monthlyExpenses = totals.expenses, categoryTotals = totals.categoryTotals;
+            const budgetStatus: Record<string,any> = {};
+            for (const budget of budgets) {
+                const status = finance.budget(data,budget,targetYear,targetMonth, targetYear===now.getFullYear() && targetMonth===now.getMonth()+1 ? now.getDate() : undefined);
+                budgetStatus[budget.category] = { ...status, budget:budget.amount };
+            }
 
             const recentTransactions = transactions
                 .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -97,25 +72,16 @@ export class DashboardController {
     // Obter resumo financeiro
     async getFinancialSummary(req: AuthRequest, res: Response) {
         try {
-            const transactions = await database.getTransactions(undefined, req.user!.id);
+            const data = await financialData(req.user!.id);
+            const now = new Date();
+            const totals = finance.summary(data,now.getFullYear(),now.getMonth()+1);
+            const transactions = totals.entries;
             const budgets = await database.getBudgets(req.user!.id);
             const creditCards = await database.getCreditCards(req.user!.id);
             const goals = await database.getFinancialGoals(req.user!.id);
-
-            // Calcular totais gerais
-            const totalIncome = transactions
-                .filter(t => t.type === 'income')
-                .reduce((sum, t) => sum + t.amount, 0);
-
-            const totalExpenses = transactions
-                .filter(t => t.type === 'expense')
-                .reduce((sum, t) => sum + t.amount, 0);
-
-            const netWorth = totalIncome - totalExpenses;
-
-            // Calcular totais de orçamento
-            const totalBudgeted = budgets.reduce((sum, b) => sum + b.amount, 0);
-            const totalBudgetSpent = budgets.reduce((sum, b) => sum + b.spent, 0);
+            const totalIncome = totals.income, totalExpenses = totals.expenses, netWorth = totals.balance;
+            const totalBudgeted = finance.sum(budgets.map(b => b.amount));
+            const totalBudgetSpent = finance.sum(budgets.map(b => finance.budget(data,b,now.getFullYear(),now.getMonth()+1,now.getDate()).spent));
 
             // Calcular totais de cartão
             const totalCardLimit = creditCards.reduce((sum, c) => sum + (c.creditLimit || c.credit_limit || 0), 0);
@@ -174,7 +140,9 @@ export class DashboardController {
     async getChartData(req: AuthRequest, res: Response) {
         try {
             const { type, period } = req.query;
-            const transactions = await database.getTransactions(undefined, req.user!.id);
+            const data = await financialData(req.user!.id);
+            const now = new Date();
+            const transactions = finance.summary(data,now.getFullYear(),now.getMonth()+1).entries;
 
             let chartData: any = {};
 
@@ -185,7 +153,7 @@ export class DashboardController {
                     transactions
                         .filter(t => t.type === 'expense')
                         .forEach(t => {
-                            categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
+                            categoryTotals[t.category] = finance.sum([categoryTotals[t.category] || 0,t.amount]);
                         });
                     
                     chartData = {
@@ -204,20 +172,7 @@ export class DashboardController {
                     const currentYear = new Date().getFullYear();
                     
                     for (let month = 1; month <= 12; month++) {
-                        const monthStr = String(month).padStart(2, '0');
-                        const monthTransactions = transactions.filter(t => {
-                            const dateStr = t.date.split('T')[0];
-                            const parts = dateStr.split('-');
-                            return parseInt(parts[1]) === month && parseInt(parts[0]) === currentYear;
-                        });
-
-                        const income = monthTransactions
-                            .filter(t => t.type === 'income')
-                            .reduce((sum, t) => sum + t.amount, 0);
-
-                        const expenses = monthTransactions
-                            .filter(t => t.type === 'expense')
-                            .reduce((sum, t) => sum + t.amount, 0);
+                        const {income,expenses} = finance.summary(data,currentYear,month);
 
                         monthlyData[`${String(month).padStart(2, '0')}`] = { income, expenses };
                     }
@@ -245,23 +200,16 @@ export class DashboardController {
                     // Gráfico semanal
                     const weeklyData: Record<string, number> = {};
                     const today = new Date();
-                    const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
-                    
-                    for (let i = 0; i < 4; i++) {
-                        const weekStart = new Date(startOfWeek);
-                        weekStart.setDate(weekStart.getDate() + (i * 7));
-                        const weekEnd = new Date(weekStart);
-                        weekEnd.setDate(weekEnd.getDate() + 6);
-
-                        const weekTransactions = transactions.filter(t => {
-                            const date = new Date(t.date);
-                            return date >= weekStart && date <= weekEnd;
-                        });
-
-                        const balance = weekTransactions
-                            .reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0);
-
-                        weeklyData[`Semana ${i + 1}`] = balance;
+                    const startOfWeek = new Date(Date.UTC(today.getFullYear(),today.getMonth(),today.getDate(),12));
+                    startOfWeek.setUTCDate(startOfWeek.getUTCDate()-((startOfWeek.getUTCDay()+6)%7)-21);
+                    for (let i=0;i<4;i++) {
+                        const start=new Date(startOfWeek);start.setUTCDate(start.getUTCDate()+i*7);
+                        const end=new Date(start);end.setUTCDate(end.getUTCDate()+6);
+                        let entries=finance.summary(data,start.getUTCFullYear(),start.getUTCMonth()+1).entries;
+                        if(start.getUTCMonth()!==end.getUTCMonth()) entries=entries.concat(finance.summary(data,end.getUTCFullYear(),end.getUTCMonth()+1).entries);
+                        weeklyData[start.toISOString().slice(0,10)] = finance.sum(entries
+                            .filter(t=>t.date>=start.toISOString().slice(0,10) && t.date<=end.toISOString().slice(0,10))
+                            .map(t=>t.type==='income'?t.amount:-t.amount));
                     }
 
                     chartData = {

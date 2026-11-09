@@ -3,6 +3,18 @@ import { installmentController } from '../controllers/installmentController';
 
 const router = Router();
 
+// GET /api/installments/groups - Obter grupos de parcelamentos
+router.get('/groups', installmentController.getInstallmentGroups);
+
+// POST /api/installments/groups - Adicionar grupo de parcelamentos
+router.post('/groups', installmentController.addInstallmentGroup);
+
+// PUT /api/installments/groups/:id - Atualizar grupo de parcelamentos
+router.put('/groups/:id', installmentController.updateInstallmentGroup);
+
+// DELETE /api/installments/groups/:id - Excluir grupo de parcelamentos
+router.delete('/groups/:id', installmentController.deleteInstallmentGroup);
+
 // GET /api/installments - Obter todos os parcelamentos
 router.get('/', installmentController.getInstallments);
 

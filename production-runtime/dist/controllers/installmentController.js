@@ -1,0 +1,299 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.installmentController = exports.InstallmentController = void 0;
+const database_1 = require("../models/database");
+const helpers_1 = require("../utils/helpers");
+class InstallmentController {
+    // Obter grupos de parcelamentos
+    async getInstallmentGroups(req, res) {
+        try {
+            const groups = await database_1.database.getInstallmentGroups(req.user.id);
+            res.json({ success: true, data: groups, total: groups.length });
+        }
+        catch (error) {
+            console.error('Erro ao buscar grupos de parcelamentos:', error);
+            res.status(500).json({ success: false, error: 'Erro ao buscar grupos de parcelamentos' });
+        }
+    }
+    // Adicionar grupo de parcelamentos
+    async addInstallmentGroup(req, res) {
+        try {
+            const groupData = req.body;
+            const name = String(groupData.name ?? '').trim();
+            const dueDay = groupData.dueDay ?? groupData.due_day ?? null;
+            if (!name) {
+                return res.status(400).json({ success: false, error: 'Nome do grupo é obrigatório' });
+            }
+            if (dueDay !== null && dueDay !== '' && (!Number.isInteger(Number(dueDay)) || Number(dueDay) < 1 || Number(dueDay) > 31)) {
+                return res.status(400).json({ success: false, error: 'Dia de vencimento deve estar entre 1 e 31' });
+            }
+            const normalizedDueDay = dueDay === null || dueDay === '' ? null : Number(dueDay);
+            const groupId = await database_1.database.addInstallmentGroup({
+                name,
+                dueDay: normalizedDueDay,
+                description: groupData.description ?? null
+            }, req.user.id);
+            res.status(201).json({
+                success: true,
+                data: { id: groupId, name, dueDay: normalizedDueDay, description: groupData.description ?? null },
+                message: 'Grupo de parcelamentos adicionado com sucesso'
+            });
+        }
+        catch (error) {
+            console.error('Erro ao adicionar grupo de parcelamentos:', error);
+            res.status(500).json({ success: false, error: error?.code === 'SQLITE_CONSTRAINT' ? 'Já existe um grupo com esse nome' : 'Erro ao adicionar grupo de parcelamentos' });
+        }
+    }
+    // Atualizar grupo de parcelamentos
+    async updateInstallmentGroup(req, res) {
+        try {
+            const { id } = req.params;
+            const groupData = req.body;
+            const name = String(groupData.name ?? '').trim();
+            const dueDay = groupData.dueDay ?? groupData.due_day ?? null;
+            if (!name) {
+                return res.status(400).json({ success: false, error: 'Nome do grupo é obrigatório' });
+            }
+            if (dueDay !== null && dueDay !== '' && (!Number.isInteger(Number(dueDay)) || Number(dueDay) < 1 || Number(dueDay) > 31)) {
+                return res.status(400).json({ success: false, error: 'Dia de vencimento deve estar entre 1 e 31' });
+            }
+            const updated = await database_1.database.updateInstallmentGroup(parseInt(id), {
+                name,
+                dueDay: dueDay === null || dueDay === '' ? null : Number(dueDay),
+                description: groupData.description ?? null
+            }, req.user.id);
+            if (!updated) {
+                return res.status(404).json({ success: false, error: 'Grupo não encontrado' });
+            }
+            res.json({ success: true, message: 'Grupo de parcelamentos atualizado com sucesso' });
+        }
+        catch (error) {
+            console.error('Erro ao atualizar grupo de parcelamentos:', error);
+            res.status(500).json({ success: false, error: error?.code === 'SQLITE_CONSTRAINT' ? 'Já existe um grupo com esse nome' : 'Erro ao atualizar grupo de parcelamentos' });
+        }
+    }
+    // Excluir grupo de parcelamentos
+    async deleteInstallmentGroup(req, res) {
+        try {
+            const { id } = req.params;
+            const deleted = await database_1.database.deleteInstallmentGroup(parseInt(id), req.user.id);
+            if (!deleted) {
+                return res.status(404).json({ success: false, error: 'Grupo não encontrado' });
+            }
+            res.json({ success: true, message: 'Grupo excluído; parcelamentos foram movidos para Sem grupo' });
+        }
+        catch (error) {
+            console.error('Erro ao excluir grupo de parcelamentos:', error);
+            res.status(500).json({ success: false, error: 'Erro ao excluir grupo de parcelamentos' });
+        }
+    }
+    // Obter todos os parcelamentos
+    async getInstallments(req, res) {
+        try {
+            const installments = await database_1.database.getInstallments(req.user.id);
+            // Adicionar status detalhado a cada parcelamento
+            const installmentsWithStatus = installments.map(installment => ({
+                ...installment,
+                status: (0, helpers_1.getInstallmentStatus)(installment)
+            }));
+            res.json({
+                success: true,
+                data: installmentsWithStatus,
+                total: installments.length
+            });
+        }
+        catch (error) {
+            console.error('Erro ao buscar parcelamentos:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro ao buscar parcelamentos'
+            });
+        }
+    }
+    // Adicionar novo parcelamento
+    async addInstallment(req, res) {
+        try {
+            const installmentData = req.body;
+            const installmentId = await database_1.database.addInstallment(installmentData, req.user.id);
+            res.status(201).json({
+                success: true,
+                data: { id: installmentId, ...installmentData },
+                message: 'Parcelamento adicionado com sucesso'
+            });
+        }
+        catch (error) {
+            console.error('Erro ao adicionar parcelamento:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro ao adicionar parcelamento'
+            });
+        }
+    }
+    // Atualizar parcelamento
+    async updateInstallment(req, res) {
+        try {
+            const { id } = req.params;
+            const updates = req.body;
+            const updated = await database_1.database.updateInstallment(parseInt(id), updates, req.user.id);
+            if (!updated) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Parcelamento não encontrado'
+                });
+            }
+            res.json({
+                success: true,
+                message: 'Parcelamento atualizado com sucesso'
+            });
+        }
+        catch (error) {
+            console.error('Erro ao atualizar parcelamento:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro ao atualizar parcelamento'
+            });
+        }
+    }
+    // Excluir parcelamento
+    async deleteInstallment(req, res) {
+        try {
+            const { id } = req.params;
+            const deleted = await database_1.database.deleteInstallment(parseInt(id), req.user.id);
+            if (!deleted) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Parcelamento não encontrado'
+                });
+            }
+            res.json({
+                success: true,
+                message: 'Parcelamento excluído com sucesso'
+            });
+        }
+        catch (error) {
+            console.error('Erro ao excluir parcelamento:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro ao excluir parcelamento'
+            });
+        }
+    }
+    // Obter parcelamentos próximos
+    async getUpcomingInstallments(req, res) {
+        try {
+            const installments = await database_1.database.getInstallments(req.user.id);
+            const today = new Date();
+            const upcoming = installments
+                .filter(installment => {
+                const status = (0, helpers_1.getInstallmentStatus)(installment);
+                return !status.isCompleted && installment.currentInstallment < installment.totalInstallments;
+            })
+                .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+                .slice(0, 10);
+            res.json({
+                success: true,
+                data: {
+                    totalUpcoming: upcoming.length,
+                    totalAmount: upcoming.reduce((sum, i) => sum + getInstallmentAmountAt(i, i.currentInstallment), 0),
+                    installments: upcoming
+                }
+            });
+        }
+        catch (error) {
+            console.error('Erro ao buscar parcelamentos próximos:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro ao buscar parcelamentos próximos'
+            });
+        }
+    }
+    // Obter parcelamentos concluídos
+    async getCompletedInstallments(req, res) {
+        try {
+            const installments = await database_1.database.getInstallments(req.user.id);
+            const completed = installments
+                .filter(installment => {
+                const status = (0, helpers_1.getInstallmentStatus)(installment);
+                return status.isCompleted;
+            });
+            res.json({
+                success: true,
+                data: {
+                    totalCompleted: completed.length,
+                    totalAmount: completed.reduce((sum, i) => sum + i.totalAmount, 0),
+                    installments: completed
+                }
+            });
+        }
+        catch (error) {
+            console.error('Erro ao buscar parcelamentos concluídos:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro ao buscar parcelamentos concluídos'
+            });
+        }
+    }
+    // Marcar parcelamento como pago
+    async markInstallmentAsPaid(req, res) {
+        try {
+            const { id } = req.params;
+            // Buscar parcelamento atual
+            const installments = await database_1.database.getInstallments(req.user.id);
+            const installment = installments.find(i => i.id === parseInt(id));
+            if (!installment) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Parcelamento não encontrado'
+                });
+            }
+            const status = (0, helpers_1.getInstallmentStatus)(installment);
+            if (status.isCompleted) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Parcelamento já está concluído'
+                });
+            }
+            // Só permitir avançar uma parcela por vez
+            const newCurrentInstallment = installment.currentInstallment + 1;
+            if (newCurrentInstallment > installment.totalInstallments) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Todas as parcelas já foram pagas'
+                });
+            }
+            const updated = await database_1.database.updateInstallmentCurrentInstallment(parseInt(id), newCurrentInstallment, req.user.id);
+            if (!updated) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Erro ao atualizar parcelamento'
+                });
+            }
+            res.json({
+                success: true,
+                message: `Parcelamento ${newCurrentInstallment}/${installment.totalInstallments} marcado como pago`,
+                data: {
+                    installmentId: parseInt(id),
+                    currentInstallment: newCurrentInstallment,
+                    isCompleted: newCurrentInstallment >= installment.totalInstallments
+                }
+            });
+        }
+        catch (error) {
+            console.error('Erro ao marcar parcelamento como pago:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erro ao marcar parcelamento como pago'
+            });
+        }
+    }
+}
+exports.InstallmentController = InstallmentController;
+exports.installmentController = new InstallmentController();
+function getInstallmentAmountAt(installment, index) {
+    const amounts = installment.installmentAmounts ?? installment.installment_amounts;
+    if (Array.isArray(amounts) && Number.isFinite(Number(amounts[index]))) {
+        return Number(amounts[index]);
+    }
+    return Number(installment.installmentAmount ?? installment.installment_amount ?? 0);
+}
+//# sourceMappingURL=installmentController.js.map

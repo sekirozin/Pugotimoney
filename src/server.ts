@@ -1,3 +1,4 @@
+import { finance, financialData } from './services/financeService';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -6,8 +7,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 import { database } from './models/database';
-import { ReportSection, ReportService } from './services/reportService';
-import { uploadMiddleware, processStatement } from './services/statementService';
+import { RealStatement, ReportSection, ReportService } from './services/reportService';
+import { uploadMiddleware, processStatement, previewStatement } from './services/statementService';
 import transactionRoutes from './routes/transactions';
 import shoppingRoutes from './routes/shopping';
 import creditCardRoutes from './routes/creditCards';
@@ -17,6 +18,10 @@ import goalRoutes from './routes/goals';
 import categoryRoutes from './routes/categories';
 import dashboardRoutes from './routes/dashboard';
 import incomeRoutes from './routes/incomes';
+import expenseRoutes from './routes/expenses';
+import pluggyRoutes, { donoDasContas, filtroBancos } from './routes/pluggy';
+import { lerVisaoPluggy, pluggyAtivo } from './services/pluggyService';
+import { despesasDoMes, receitasDoMes } from './services/pluggyRegras';
 import { incomeOccursInMonth } from './utils/incomeRecurrence';
 import profileRoutes from './routes/profile';
 import authRoutes from './routes/auth';
@@ -45,8 +50,8 @@ app.use(helmet({
             scriptSrc: ["'self'"],
             scriptSrcAttr: ["'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'", "https:"],
-            imgSrc: ["'self'", "data:", "blob:"],
-            connectSrc: ["'self'"],
+            imgSrc: ["'self'", "data:", "blob:", "https://pugotilab.com"],
+            connectSrc: ["'self'", "https://pugotilab.com"],
             fontSrc: ["'self'", "https:", "data:"],
             objectSrc: ["'none'"],
             frameSrc: ["'self'"],
@@ -112,20 +117,20 @@ app.use('/api/goals', authMiddleware, goalRoutes);
 app.use('/api/categories', authMiddleware, categoryRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 app.use('/api/incomes', authMiddleware, incomeRoutes);
+app.use('/api/expenses', authMiddleware, expenseRoutes);
+app.use('/api/pluggy', authMiddleware, pluggyRoutes);
 app.use('/api/profile', authMiddleware, profileRoutes);
 
 // Rota para dados iniciais (para o frontend)
 app.get('/api/initial-data', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        await database.processRecurringTransactions();
         const userId = req.user!.id;
-        const transactions = await database.getTransactions(undefined, userId);
-        const shoppingList = await database.getShoppingItems(userId);
-        const creditCards = await database.getCreditCards(userId);
-        const budgets = await database.getBudgets(userId);
-        const installments = await database.getInstallments(userId);
-        const goals = await database.getFinancialGoals(userId);
-        const incomes = await database.getIncomes(userId);
+        const [transactions,shoppingList,creditCards,budgets,installments,installmentGroups,subscriptionGroups,goals,incomes,expenses] = await Promise.all([
+            database.getTransactions(undefined,userId),database.getShoppingItems(userId),
+            database.getCreditCards(userId),database.getBudgets(userId),database.getInstallments(userId),
+            database.getInstallmentGroups(userId),database.getSubscriptionGroups(userId),
+            database.getFinancialGoals(userId),database.getIncomes(userId),database.getExpenses(userId)
+        ]);
 
         res.json({
             transactions,
@@ -133,8 +138,11 @@ app.get('/api/initial-data', authMiddleware, async (req: AuthRequest, res) => {
             creditCards,
             budgets,
             installments,
+            installmentGroups,
+            subscriptionGroups,
             goals,
-            incomes
+            incomes,
+            expenses
         });
     } catch (error) {
         console.error('Erro ao buscar dados iniciais:', error);
@@ -152,37 +160,19 @@ app.get('/api/reports/monthly', authMiddleware, async (req: AuthRequest, res) =>
         
         const transactions = await database.getTransactions(undefined, req.user!.id);
         const incomes = await database.getIncomes(req.user!.id);
+        const expenses = await database.getExpenses(req.user!.id);
         const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1;
         const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
         
-        const monthlyTransactions = transactions.filter(t => {
-            const date = new Date(t.date);
-            return date.getMonth() + 1 === targetMonth && date.getFullYear() === targetYear;
-        });
-
-        const income = monthlyTransactions
-            .filter(t => t.type === 'income')
-            .reduce((sum, t) => sum + t.amount, 0)
-            + incomes
-                .filter(item => incomeOccursInMonth(item, targetMonth, targetYear))
-                .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-        const expenses = monthlyTransactions
-            .filter(t => t.type === 'expense')
-            .reduce((sum, t) => sum + t.amount, 0);
-
-        const categoryBreakdown: Record<string, number> = {};
-        monthlyTransactions
-            .filter(t => t.type === 'expense')
-            .forEach(t => {
-                categoryBreakdown[t.category] = (categoryBreakdown[t.category] || 0) + t.amount;
-            });
-
+        if (!Number.isInteger(targetMonth) || targetMonth < 1 || targetMonth > 12 || !Number.isInteger(targetYear)) { res.status(400).json({success:false,error:'Período inválido'}); return; }
+        const totals = finance.summary({transactions,incomes,expenses},targetYear,targetMonth);
+        const income = totals.income, expensesTotal = totals.expenses, categoryBreakdown = totals.categoryTotals;
         res.json({
             success: true,
             data: {
                 income,
-                expenses,
-                balance: income - expenses,
+                expenses: expensesTotal,
+                balance: totals.balance,
                 categoryBreakdown
             }
         });
@@ -257,7 +247,18 @@ app.get('/api/report/statement', authMiddleware, async (req: AuthRequest, res) =
             ? sections.split(',').filter((section): section is ReportSection => allowedSections.includes(section as ReportSection))
             : allowedSections;
 
-        const pdfBuffer = await ReportService.generateMonthlyStatement(targetYear, targetMonth, selectedSections, req.user!.id);
+        // Dono das contas conectadas: receitas, gastos e resumo vêm das contas (com o filtro de bancos da tela).
+        let real: RealStatement | undefined;
+        let dono = false;
+        try { dono = pluggyAtivo() && donoDasContas(req); } catch { dono = false; }
+        if (dono && Number.isInteger(targetYear) && Number.isInteger(targetMonth) && targetMonth >= 1 && targetMonth <= 12) {
+            const visao = await lerVisaoPluggy().catch(() => null);
+            if (visao) {
+                const bancos = filtroBancos(req.query.bancos);
+                real = { receitas: receitasDoMes(visao, targetYear, targetMonth, bancos), despesas: despesasDoMes(visao, targetYear, targetMonth, bancos) };
+            }
+        }
+        const pdfBuffer = await ReportService.generateMonthlyStatement(targetYear, targetMonth, selectedSections, req.user!.id, real);
 
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=extrato-${targetYear}-${String(targetMonth).padStart(2, '0')}.pdf`);
@@ -293,6 +294,10 @@ app.post('/api/import/statement', authMiddleware, statementUploadHandler, async 
             });
         }
 
+        if (req.query.preview === '1') {
+            const preview = await previewStatement(req.file.buffer,req.file.mimetype,req.file.originalname);
+            res.json({success:true,...preview}); return;
+        }
         const result = await processStatement(req.file.buffer, req.file.mimetype, req.file.originalname, {
             userId: (req as AuthRequest).user!.id
         });
@@ -323,6 +328,17 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
     });
 });
 
+// Frontend deep links share the existing public shell. APIs and missing assets
+// retain their own 404; authorization remains in the API middleware above.
+app.get('*', (req, res, next) => {
+    if (/^\/(?:api|auth|oauth)(?:\/|$)/.test(req.path) || path.extname(req.path)) {
+        next();
+        return;
+    }
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
 // Middleware 404
 app.use('*', (req, res) => {
     res.status(404).json({
@@ -332,7 +348,11 @@ app.use('*', (req, res) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, () => {
+database.ready.then(async () => {
+    await database.processRecurringTransactions();
+    const recurringTimer = setInterval(() => { void database.processRecurringTransactions().catch(error => console.error('Falha nas recorrências:', error.message)); }, 60 * 60 * 1000);
+    recurringTimer.unref();
+    app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
     console.log(`Frontend disponível em: http://localhost:${PORT}`);
     console.log(`API disponível em: http://localhost:${PORT}/api`);
@@ -347,5 +367,7 @@ app.listen(PORT, () => {
         process.exit(0);
     });
 });
+
+}).catch(error => { console.error("Falha ao iniciar banco:", error.message); process.exitCode = 1; });
 
 export default app;

@@ -4,6 +4,98 @@ import { getInstallmentStatus } from '../utils/helpers';
 import { AuthRequest } from '../middleware/auth';
 
 export class InstallmentController {
+    // Obter grupos de parcelamentos
+    async getInstallmentGroups(req: AuthRequest, res: Response) {
+        try {
+            const groups = await database.getInstallmentGroups(req.user!.id);
+            res.json({ success: true, data: groups, total: groups.length });
+        } catch (error) {
+            console.error('Erro ao buscar grupos de parcelamentos:', error);
+            res.status(500).json({ success: false, error: 'Erro ao buscar grupos de parcelamentos' });
+        }
+    }
+
+    // Adicionar grupo de parcelamentos
+    async addInstallmentGroup(req: AuthRequest, res: Response) {
+        try {
+            const groupData = req.body;
+            const name = String(groupData.name ?? '').trim();
+            const dueDay = groupData.dueDay ?? groupData.due_day ?? null;
+
+            if (!name) {
+                return res.status(400).json({ success: false, error: 'Nome do grupo é obrigatório' });
+            }
+            if (dueDay !== null && dueDay !== '' && (!Number.isInteger(Number(dueDay)) || Number(dueDay) < 1 || Number(dueDay) > 31)) {
+                return res.status(400).json({ success: false, error: 'Dia de vencimento deve estar entre 1 e 31' });
+            }
+
+            const normalizedDueDay = dueDay === null || dueDay === '' ? null : Number(dueDay);
+            const groupId = await database.addInstallmentGroup({
+                name,
+                dueDay: normalizedDueDay,
+                description: groupData.description ?? null
+            }, req.user!.id);
+
+            res.status(201).json({
+                success: true,
+                data: { id: groupId, name, dueDay: normalizedDueDay, description: groupData.description ?? null },
+                message: 'Grupo de parcelamentos adicionado com sucesso'
+            });
+        } catch (error: any) {
+            console.error('Erro ao adicionar grupo de parcelamentos:', error);
+            res.status(500).json({ success: false, error: error?.code === 'SQLITE_CONSTRAINT' ? 'Já existe um grupo com esse nome' : 'Erro ao adicionar grupo de parcelamentos' });
+        }
+    }
+
+    // Atualizar grupo de parcelamentos
+    async updateInstallmentGroup(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            const groupData = req.body;
+            const name = String(groupData.name ?? '').trim();
+            const dueDay = groupData.dueDay ?? groupData.due_day ?? null;
+
+            if (!name) {
+                return res.status(400).json({ success: false, error: 'Nome do grupo é obrigatório' });
+            }
+            if (dueDay !== null && dueDay !== '' && (!Number.isInteger(Number(dueDay)) || Number(dueDay) < 1 || Number(dueDay) > 31)) {
+                return res.status(400).json({ success: false, error: 'Dia de vencimento deve estar entre 1 e 31' });
+            }
+
+            const updated = await database.updateInstallmentGroup(parseInt(id), {
+                name,
+                dueDay: dueDay === null || dueDay === '' ? null : Number(dueDay),
+                description: groupData.description ?? null
+            }, req.user!.id);
+
+            if (!updated) {
+                return res.status(404).json({ success: false, error: 'Grupo não encontrado' });
+            }
+
+            res.json({ success: true, message: 'Grupo de parcelamentos atualizado com sucesso' });
+        } catch (error: any) {
+            console.error('Erro ao atualizar grupo de parcelamentos:', error);
+            res.status(500).json({ success: false, error: error?.code === 'SQLITE_CONSTRAINT' ? 'Já existe um grupo com esse nome' : 'Erro ao atualizar grupo de parcelamentos' });
+        }
+    }
+
+    // Excluir grupo de parcelamentos
+    async deleteInstallmentGroup(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            const deleted = await database.deleteInstallmentGroup(parseInt(id), req.user!.id);
+
+            if (!deleted) {
+                return res.status(404).json({ success: false, error: 'Grupo não encontrado' });
+            }
+
+            res.json({ success: true, message: 'Grupo excluído; parcelamentos foram movidos para Sem grupo' });
+        } catch (error) {
+            console.error('Erro ao excluir grupo de parcelamentos:', error);
+            res.status(500).json({ success: false, error: 'Erro ao excluir grupo de parcelamentos' });
+        }
+    }
+
     // Obter todos os parcelamentos
     async getInstallments(req: AuthRequest, res: Response) {
         try {

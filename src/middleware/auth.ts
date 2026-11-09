@@ -2,6 +2,32 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { database } from '../models/database';
 
+
+// Sessão Pugotilab ainda ativa? (Sair ou "Sessões abertas" no Pugoti Profile derrubam o acesso aqui também.)
+// Cache de 3 s por cookie para não consultar o auth a cada imagem; auth fora do ar não derruba quem já entrou.
+const validacoesPugotilab = new Map<string, { ativa: boolean; em: number }>();
+async function sessaoPugotilabAtiva(token: string, url: string): Promise<boolean> {
+    if (!token) return false;
+    const guardada = validacoesPugotilab.get(token);
+    if (guardada && Date.now() - guardada.em < 3000) return guardada.ativa;
+    let ativa = true;
+    try {
+        const resposta = await fetch(url, { headers: { Cookie: `pugotilab_session=${encodeURIComponent(token)}` }, signal: AbortSignal.timeout(5000) });
+        if (resposta.status === 401 || resposta.status === 403) ativa = false;
+    } catch { /* auth indisponível: mantém o acesso */ }
+    if (validacoesPugotilab.size > 2000) validacoesPugotilab.delete(validacoesPugotilab.keys().next().value!);
+    validacoesPugotilab.set(token, { ativa, em: Date.now() });
+    return ativa;
+}
+function cookiePugotilab(req: Request): string {
+    for (const parte of String(req.headers.cookie || '').split(';')) {
+        const [nome, ...valor] = parte.trim().split('=');
+        if (nome === 'pugotilab_session') return decodeURIComponent(valor.join('='));
+    }
+    return '';
+}
+const urlSessaoPugotilab = process.env.PUGOTILAB_SESSION_URL || 'http://pugotilab-auth:8080/auth/api/session';
+
 function getJwtSecret(): string {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
@@ -23,6 +49,9 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
     const token = authHeader.split(' ')[1];
     try {
         const decoded = jwt.verify(token, getJwtSecret()) as { id: number; username: string; role: string };
+        if (!(await sessaoPugotilabAtiva(cookiePugotilab(req), urlSessaoPugotilab))) {
+            return res.status(401).json({ success: false, error: 'Sessão Pugotilab encerrada' });
+        }
         const currentUser = await database.getUserById(decoded.id);
         if (!currentUser) {
             return res.status(401).json({ success: false, error: 'Usuário não encontrado' });

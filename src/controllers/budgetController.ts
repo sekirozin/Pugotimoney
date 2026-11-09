@@ -1,22 +1,29 @@
+import { finance, financialData } from '../services/financeService';
 import { Request, Response } from 'express';
 import { database } from '../models/database';
 import { Budget } from '../models/types';
 import { getBudgetStatus, getPeriodName } from '../utils/helpers';
 import { AuthRequest } from '../middleware/auth';
 
+async function calculatedBudgets(userId:number,year?:number,month?:number) {
+    const now=new Date(), [budgets,data]=await Promise.all([database.getBudgets(userId),financialData(userId)]);
+    return budgets.map(b=>finance.budget(data,b,year || now.getFullYear(),month || now.getMonth()+1,
+        (!year || year===now.getFullYear()) && (!month || month===now.getMonth()+1) ? now.getDate() : undefined));
+}
+
 export class BudgetController {
     // Obter todos os orçamentos
     async getBudgets(req: AuthRequest, res: Response) {
         try {
-            const budgets = await database.getBudgets(req.user!.id);
+            const budgets = await calculatedBudgets(req.user!.id);
             
             // Adicionar status detalhado a cada orçamento
-            const budgetsWithStatus = budgets.map(budget => ({
-                ...budget,
-                periodName: getPeriodName(budget.period),
-                status: getBudgetStatus(budget)
-            }));
-            
+            const data = await financialData(req.user!.id), now = new Date();
+            const budgetsWithStatus = budgets.map(budget => {
+                const calculated = finance.budget(data,budget,now.getFullYear(),now.getMonth()+1,now.getDate());
+                return {...calculated,periodName:getPeriodName(budget.period),status:getBudgetStatus(calculated)};
+            });
+
             res.json({
                 success: true,
                 data: budgetsWithStatus,
@@ -35,6 +42,7 @@ export class BudgetController {
     async addBudget(req: AuthRequest, res: Response) {
         try {
             const budgetData = req.body;
+            if (typeof req.body.amount !== 'number' || !Number.isFinite(req.body.amount) || req.body.amount <= 0 || !Number.isSafeInteger(Math.round(req.body.amount*100)) || typeof req.body.category !== 'string' || !req.body.category.trim() || !['weekly','monthly','yearly'].includes(req.body.period)) { res.status(400).json({success:false,error:'Orçamento inválido'}); return; }
             
             const budgetId = await database.addBudget(budgetData, req.user!.id);
             
@@ -57,6 +65,7 @@ export class BudgetController {
         try {
             const { id } = req.params;
             const updates = req.body;
+            if (typeof req.body.amount !== 'number' || !Number.isFinite(req.body.amount) || req.body.amount <= 0 || !Number.isSafeInteger(Math.round(req.body.amount*100)) || typeof req.body.category !== 'string' || !req.body.category.trim() || !['weekly','monthly','yearly'].includes(req.body.period)) { res.status(400).json({success:false,error:'Orçamento inválido'}); return; }
             
             const updated = await database.updateBudget(parseInt(id), updates, req.user!.id);
             
@@ -109,61 +118,13 @@ export class BudgetController {
 
     // Atualizar valor gasto do orçamento
     async updateSpentAmount(req: AuthRequest, res: Response) {
-        try {
-            const { id } = req.params;
-            const { amount } = req.body;
-            
-            if (typeof amount !== 'number' || amount < 0) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Valor inválido. Deve ser um número positivo.'
-                });
-            }
-
-            // Buscar orçamento atual
-            const budgets = await database.getBudgets(req.user!.id);
-            const budget = budgets.find(b => b.id === parseInt(id));
-            
-            if (!budget) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Orçamento não encontrado'
-                });
-            }
-
-            const updated = await database.updateBudget(parseInt(id), {
-                spent: amount
-            }, req.user!.id);
-            
-            if (!updated) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Erro ao atualizar valor gasto'
-                });
-            }
-
-            res.json({
-                success: true,
-                message: 'Valor gasto atualizado com sucesso',
-                data: {
-                    budgetId: parseInt(id),
-                    newSpent: amount,
-                    status: getBudgetStatus({ ...budget, spent: amount })
-                }
-            });
-        } catch (error) {
-            console.error('Erro ao atualizar valor gasto:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Erro ao atualizar valor gasto'
-            });
-        }
+        return res.status(409).json({success:false,error:'O gasto é calculado pelos lançamentos. Edite as transações para ajustá-lo.'});
     }
 
     // Obter status dos orçamentos
     async getBudgetsStatus(req: AuthRequest, res: Response) {
         try {
-            const budgets = await database.getBudgets(req.user!.id);
+            const budgets = await calculatedBudgets(req.user!.id);
             const now = new Date();
             
             // Calcular totais por categoria para o período atual
@@ -210,7 +171,7 @@ export class BudgetController {
     // Obter alertas de orçamento
     async getBudgetAlerts(req: AuthRequest, res: Response) {
         try {
-            const budgets = await database.getBudgets(req.user!.id);
+            const budgets = await calculatedBudgets(req.user!.id);
             const alerts = [];
 
             for (const budget of budgets) {
@@ -264,7 +225,9 @@ export class BudgetController {
                 });
             }
 
-            const budgets = await database.getBudgets(req.user!.id);
+            const targetYear=Number(year),targetMonth=Number(month);
+            if (!Number.isInteger(targetYear) || targetYear<1900 || targetYear>9999 || !Number.isInteger(targetMonth) || targetMonth<1 || targetMonth>12) return res.status(400).json({success:false,error:'Período inválido'});
+            const budgets = await calculatedBudgets(req.user!.id,targetYear,targetMonth);
             const now = new Date();
             const currentMonth = parseInt(month as string);
             const currentYear = parseInt(year as string);

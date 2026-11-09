@@ -4,10 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
-router.post('/register', authController.register);
-router.post('/login', authController.login);
 router.get('/sso', authController.sso);
 router.get('/me', authMiddleware, authController.me);
-router.get('/check-first-user', authController.checkFirstUser);
 
 export default router;

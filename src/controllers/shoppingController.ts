@@ -3,7 +3,34 @@ import { database } from '../models/database';
 import { ShoppingItem } from '../models/types';
 import { AuthRequest } from '../middleware/auth';
 
+function normalizePurchaseUrl(value: unknown): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    try {
+        const url = new URL(String(value).trim());
+        if (url.protocol === 'http:' || url.protocol === 'https:') return url.toString();
+    } catch {
+        // Tratado abaixo.
+    }
+    throw new Error('INVALID_PURCHASE_URL');
+}
+
 export class ShoppingController {
+    async reorderShoppingItems(req: AuthRequest, res: Response) {
+        try {
+            const itemIds = req.body.itemIds;
+            if (!Array.isArray(itemIds) || itemIds.some((id: unknown) => typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) || new Set(itemIds).size !== itemIds.length) {
+                return res.status(400).json({ success: false, error: 'Ordem de itens inválida' });
+            }
+
+            const reordered = await database.reorderShoppingItems(itemIds, req.user!.id);
+            if (!reordered) return res.status(400).json({ success: false, error: 'A lista informada está incompleta' });
+            res.json({ success: true, message: 'Prioridades atualizadas' });
+        } catch (error) {
+            console.error('Erro ao reordenar lista de compras:', error);
+            res.status(500).json({ success: false, error: 'Erro ao reordenar lista de compras' });
+        }
+    }
+
     // Obter todos os itens da lista de compras
     async getShoppingItems(req: AuthRequest, res: Response) {
         try {
@@ -26,7 +53,10 @@ export class ShoppingController {
     // Adicionar novo item à lista de compras
     async addShoppingItem(req: AuthRequest, res: Response) {
         try {
-            const itemData = req.body;
+            const itemData = {
+                ...req.body,
+                purchaseUrl: normalizePurchaseUrl(req.body.purchaseUrl ?? req.body.purchase_url)
+            };
             
             const item = await database.addShoppingItem(itemData, req.user!.id);
             
@@ -36,6 +66,9 @@ export class ShoppingController {
                 message: 'Item adicionado à lista de compras com sucesso'
             });
         } catch (error) {
+            if (error instanceof Error && error.message === 'INVALID_PURCHASE_URL') {
+                return res.status(400).json({ success: false, error: 'Informe um link de compra válido (http ou https)' });
+            }
             console.error('Erro ao adicionar item à lista de compras:', error);
             res.status(500).json({
                 success: false,
@@ -48,7 +81,10 @@ export class ShoppingController {
     async updateShoppingItem(req: AuthRequest, res: Response) {
         try {
             const { id } = req.params;
-            const updates = req.body;
+            const updates = {
+                ...req.body,
+                purchaseUrl: normalizePurchaseUrl(req.body.purchaseUrl ?? req.body.purchase_url)
+            };
             
             const updated = await database.updateShoppingItem(parseInt(id), updates, req.user!.id);
             
@@ -64,6 +100,9 @@ export class ShoppingController {
                 message: 'Item atualizado com sucesso'
             });
         } catch (error) {
+            if (error instanceof Error && error.message === 'INVALID_PURCHASE_URL') {
+                return res.status(400).json({ success: false, error: 'Informe um link de compra válido (http ou https)' });
+            }
             console.error('Erro ao atualizar item da lista de compras:', error);
             res.status(500).json({
                 success: false,
@@ -102,44 +141,24 @@ export class ShoppingController {
     // Alternar status de comprado do item
     async togglePurchased(req: AuthRequest, res: Response) {
         try {
-            const { id } = req.params;
-            
-            // Buscar item atual
-            const items = await database.getShoppingItems(req.user!.id);
-            const item = items.find(i => i.id === parseInt(id));
-            
-            if (!item) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Item não encontrado'
-                });
+            const id = Number(req.params.id);
+            if (!Number.isSafeInteger(id) || id <= 0) {
+                return res.status(400).json({ success: false, error: 'Item inválido' });
             }
 
-            // Atualizar status
-            const updated = await database.updateShoppingItem(parseInt(id), {
-                item: item.item,
-                category: item.category,
-                estimatedPrice: item.estimatedPrice || item.estimated_price,
-                purchased: !item.purchased
-            }, req.user!.id);
-            
-            if (!updated) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Erro ao atualizar status do item'
-                });
+            const purchased = await database.toggleShoppingItemPurchased(id, req.user!.id);
+            if (purchased === null) {
+                return res.status(404).json({ success: false, error: 'Item não encontrado' });
             }
 
             res.json({
                 success: true,
-                message: `Item marcado como ${!item.purchased ? 'comprado' : 'não comprado'} com sucesso`
+                data: { id, purchased },
+                message: `Item marcado como ${purchased ? 'comprado' : 'não comprado'} com sucesso`
             });
         } catch (error) {
             console.error('Erro ao alternar status do item:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Erro ao alternar status do item'
-            });
+            res.status(500).json({ success: false, error: 'Erro ao alternar status do item' });
         }
     }
 

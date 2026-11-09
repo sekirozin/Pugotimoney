@@ -1,3 +1,4 @@
+import {finance,financialData} from '../services/financeService';
 import { Request, Response } from 'express';
 import { database } from '../models/database';
 import { Transaction } from '../models/types';
@@ -18,6 +19,12 @@ export class TransactionController {
             if (minAmount) filters.minAmount = parseFloat(minAmount as string);
             if (maxAmount) filters.maxAmount = parseFloat(maxAmount as string);
 
+            if (req.query.limit !== undefined || req.query.offset !== undefined) {
+                filters.limit=Number(req.query.limit || 50); filters.offset=Number(req.query.offset || 0);
+                if (!Number.isInteger(filters.limit) || filters.limit<1 || filters.limit>100 || !Number.isInteger(filters.offset) || filters.offset<0) {
+                    return res.status(400).json({success:false,error:'Paginação inválida'});
+                }
+            }
             const transactions = await database.getTransactions(filters, req.user!.id);
             
             res.json({
@@ -75,6 +82,9 @@ export class TransactionController {
                 });
             }
 
+            if (transactionData.credit_card_id && !(await database.getCreditCards(req.user!.id)).some(card=>card.id===Number(transactionData.credit_card_id))) {
+                return res.status(400).json({success:false,error:'Cartão não encontrado'});
+            }
             const transactionId = await database.addTransaction(transactionData, req.user!.id);
             
             res.status(201).json({
@@ -110,6 +120,9 @@ export class TransactionController {
                 });
             }
 
+            if (updates.credit_card_id && !(await database.getCreditCards(req.user!.id)).some(card=>card.id===Number(updates.credit_card_id))) {
+                return res.status(400).json({success:false,error:'Cartão não encontrado'});
+            }
             const updated = await database.updateTransaction(parseInt(id), updates, req.user!.id);
             
             if (!updated) {
@@ -171,11 +184,11 @@ export class TransactionController {
                 });
             }
 
-            const summary = await database.getMonthlySummary(
-                parseInt(year as string),
-                parseInt(month as string),
-                req.user!.id
-            );
+            const targetYear=Number(year),targetMonth=Number(month);
+            if (!Number.isInteger(targetYear) || targetYear<1900 || targetYear>9999 || !Number.isInteger(targetMonth) || targetMonth<1 || targetMonth>12) return res.status(400).json({success:false,error:'Período inválido'});
+            const totals=finance.summary(await financialData(req.user!.id),targetYear,targetMonth);
+            const summary={income:totals.income,expense:totals.expenses};
+
 
             res.json({
                 success: true,

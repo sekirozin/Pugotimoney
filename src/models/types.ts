@@ -16,6 +16,8 @@ export interface ShoppingItem {
     item: string;
     category: string;
     estimatedPrice: number;
+    purchaseUrl?: string | null;
+    sortOrder?: number;
     purchased: boolean;
     created_at: string;
     updated_at: string;
@@ -75,6 +77,18 @@ export interface Income {
     category: string;
     date: string;
     recurrence: 'specific' | 'monthly' | 'yearly';
+    created_at: string;
+}
+
+export interface Expense {
+    id: number;
+    description: string;
+    amount: number;
+    category: string;
+    date: string;
+    recurrence: 'specific' | 'monthly' | 'yearly';
+    /** Data em que foi marcada como concluída; nas recorrentes vale para aquele mês (mensal) ou ano (anual). */
+    completed_at: string | null;
     created_at: string;
 }
 
